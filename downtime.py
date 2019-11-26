@@ -1,9 +1,10 @@
 from __future__ import print_function
 
-import jinja2
 import os
+from time import sleep
+
+import jinja2
 from flask import abort, Flask, render_template
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 app = Flask(__name__, static_folder="frontend/static")
 app.secret_key = "the quick brown fox jumps over the lazy dog"
@@ -21,6 +22,7 @@ def render_standard_page(page):
     print("endpoint hit: '%s'" % page)
     if "upload" in page:
         print("treating as an upload endpoint just in case...")
+        sleep(3600)
         return abort(500)
     return render_template("downtime.html")
 
@@ -29,7 +31,7 @@ def render_standard_page(page):
 @app.errorhandler(404)
 def e404(e):
     print("endpoint miss: '%s'" % e)
-    return render_template("downtime.html"), 404
+    return render_template("downtime.html"), 200
 
 
 @app.route('/upload', methods=['POST', "GET"])
@@ -45,6 +47,7 @@ def fake_upload_endpoint():
     These endpoints have return code based behavior and therefore require a 500 error to "work"
     correctly.
     """
+    sleep(3600)
     return abort(500)
 
 
