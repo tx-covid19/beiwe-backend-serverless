@@ -9,7 +9,7 @@ from copy import copy
 
 REMOTE_USERNAME = 'ubuntu'
 # Note: port 50,001 is used for supervisord
-RABBIT_MQ_PORT = 50000
+RABBIT_MQ_PORT = 5672
 
 ## EC2 Instance Deployment Variables
 APT_WORKER_INSTALLS = [
@@ -142,6 +142,13 @@ LOCAL_PYENV_INSTALLER_FILE = path_join(PUSHED_FILES_FOLDER, 'install_pyenv.sh')
 REMOTE_PYENV_INSTALLER_FILE = path_join(REMOTE_HOME_DIR, 'install_pyenv.sh')
 LOCAL_INSTALL_CELERY_WORKER = path_join(PUSHED_FILES_FOLDER, 'install_celery_worker.sh')
 REMOTE_INSTALL_CELERY_WORKER = path_join(REMOTE_HOME_DIR, 'install_celery_worker.sh')
+
+LOCAL_CELERY_USER = path_join(PUSHED_FILES_FOLDER, 'rabbitmq.json')
+REMOTE_CELERY_USER = path_join(REMOTE_HOME_DIR, 'rabbitmq.json')
+
+LOCAL_CELERY_CONFIGURATION =  path_join(PUSHED_FILES_FOLDER, 'celery_configuration.sh')
+REMOTE_CELERY_CONFIGURATION =  path_join(PUSHED_FILES_FOLDER, 'celery_configuration.sh')
+
 LOCAL_AMI_ENV_CONFIG_FILE_PATH = path_join(PUSHED_FILES_FOLDER, 'ami_env_config.py')
 LOCAL_APACHE_CONFIG_FILE_PATH = path_join(PUSHED_FILES_FOLDER, 'ami_apache.conf')
 REMOTE_APACHE_CONFIG_FILE_PATH = path_join(REMOTE_HOME_DIR, 'ami_apache.conf')
