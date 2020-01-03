@@ -19,3 +19,10 @@ pytz
 
 # magical cron utils git commit version that uses xrange
 git+https://github.com/zagaran/cronutils.git@db48e44660fc843b77eccf2df518dbadc9bdc466
+
+# need libs that were missing
+numpy==1.15.2
+jinja2
+
+# added by CC
+validate_email
