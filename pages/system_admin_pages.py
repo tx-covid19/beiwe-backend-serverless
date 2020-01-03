@@ -8,6 +8,7 @@ from flask import (abort, Blueprint, flash, redirect, render_template, request,
 from config.constants import CHECKBOX_TOGGLES, TIMER_VALUES
 from database.study_models import Study
 from database.user_models import Researcher
+from database.data_access_models import FileToProcess
 from libs.admin_authentication import (authenticate_system_admin,
     get_admins_allowed_studies, admin_is_system_admin,
     authenticate_admin_study_access)
@@ -18,6 +19,24 @@ system_admin_pages = Blueprint('system_admin_pages', __name__)
 
 # TODO: Document.
 
+
+@system_admin_pages.route('/manage_processing', methods=['GET'])
+@authenticate_system_admin
+def manage_processing():
+
+    files_to_process_objects = FileToProcess.objects.filter(deleted=False)
+    files_to_process_count = files_to_process_objects.count()
+    files_to_process = []
+    for fp in files_to_process_objects:
+        files_to_process.append([fp.created_on, fp.study.name, fp.participant.patient_id, fp.s3_file_path])
+
+    return render_template(
+        'manage_processing.html',
+        files_to_process_count=files_to_process_count,
+        files_to_process=files_to_process,
+        allowed_studies=get_admins_allowed_studies(),
+        system_admin=admin_is_system_admin()
+    )
 
 @system_admin_pages.route('/manage_researchers', methods=['GET'])
 @authenticate_system_admin
