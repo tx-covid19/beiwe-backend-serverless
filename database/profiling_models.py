@@ -5,8 +5,9 @@ from django.utils import timezone
 
 from config.constants import UPLOAD_FILE_TYPE_MAPPING
 from libs.security import decode_base64
-from database.models import JSONTextField, AbstractModel, Participant
-
+from libs.parse_filename import parse_filename
+from database.models import JSONTextField, AbstractModel
+from database.user_models import Participant
 
 class EncryptionErrorMetadata(AbstractModel):
     
@@ -63,6 +64,83 @@ class DecryptionKeyError(AbstractModel):
         return decode_base64(self.contents)
 
 
+class ReceivedDataStatsHourly(AbstractModel):
+
+    participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='received_data_stats_hourly')
+    data_type = models.CharField(max_length=256)
+    data_collection_hour = models.DateTimeField()
+
+    number_of_observations = models.PositiveIntegerField()
+
+    class Meta:
+        unique_together = ('participant', 'data_type', 'data_collection_hour')
+    
+    @classmethod
+    def update_statistics(cls, file_path, participant, number_of_observations, timestamp):
+ 
+        # determine file type
+        data_type = parse_filename(file_path)['data_type']
+
+        # round timestamp down to the nearest hour
+        timestamp_hour = timestamp.replace(microsecond=0, second=0, minute=0)
+
+        if not cls.objects.filter(participant=participant, data_type=data_type, data_collection_hour=timestamp_hour).exists():
+            cls.objects.create(
+                participant = participant,
+                data_type = data_type,
+                data_collection_hour = timestamp_hour,
+                number_of_observations = number_of_observations
+            )
+
+        else:
+            statistics_object = cls.objects.get(participant=participant, data_type=data_type, data_collection_hour=timestamp_hour)
+            statistics_object.update(
+                number_of_observations = statistics_object.number_of_observations + number_of_observations
+            )
+
+        return
+ 
+class ReceivedDataStats(AbstractModel):
+
+    participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='received_data_stats')
+    data_type = models.CharField(max_length=256)
+
+    last_upload_timestamp = models.DateTimeField()
+
+    number_of_uploads = models.PositiveIntegerField()
+    number_bytes_uploaded = models.BigIntegerField()
+
+    class Meta:
+        unique_together = ('participant', 'data_type')
+    
+    @classmethod
+    def update_statistics(cls, file_path, participant, file_size, timestamp):
+
+        # determine file type
+        data_type = parse_filename(file_path)['data_type']
+
+        if not cls.objects.filter(participant=participant, data_type=data_type).exists():
+            cls.objects.create(
+                participant = participant,
+                data_type = data_type,
+                last_upload_timestamp = timestamp,
+                number_of_uploads = 1,
+                number_bytes_uploaded = file_size
+            )
+
+        else:
+            statistics_object = cls.objects.get(participant=participant, data_type=data_type)
+            statistics_object.update(
+                number_of_uploads = statistics_object.number_of_uploads + 1,
+                number_bytes_uploaded = statistics_object.number_bytes_uploaded + file_size
+            )
+ 
+            if timestamp > statistics_object.last_upload_timestamp:
+                statistics_object.update(
+                    last_upload_timestamp = timestamp
+                )
+                 
+
 class UploadTracking(AbstractModel):
     
     file_path = models.CharField(max_length=256)
@@ -100,11 +178,8 @@ class UploadTracking(AbstractModel):
             data["totals"]["users"].add(upload["participant"])
             
             # get data stream type from file_path (woops, ios log broke this code, fixed)
-            path_extraction = upload["file_path"].split("/", 2)[1]
-            if path_extraction == "ios":
-                path_extraction = "ios_log"
-                
-            file_type = UPLOAD_FILE_TYPE_MAPPING[path_extraction]
+            data_type = parse_filename(file_path)['data_type']
+
             # update per-data-stream information
             data[file_type]["megabytes"] += upload["file_size"]/ 1024. / 1024.
             data[file_type]["count"] += 1
