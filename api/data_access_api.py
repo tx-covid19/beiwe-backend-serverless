@@ -15,7 +15,7 @@ from database.study_models import Study
 from database.user_models import Participant, Researcher
 from libs.s3 import s3_retrieve, s3_upload
 from libs.streaming_bytes_io import StreamingBytesIO
-
+from libs.parse_filename import parse_filename
 from database.data_access_models import PipelineUpload, InvalidUploadParameterError, PipelineUploadTags
 
 # Data Notes
@@ -48,7 +48,6 @@ def _get_study_or_abort_404(study_object_id, study_pk):
     if study_object_id:
         # If the ID is incorrectly sized, we return a 400
         if not is_object_id(study_object_id):
-            print("Received invalid length objectid as study_id in the data access API.")
             return abort(400)
         # If no Study with the given ID exists, we return a 404
         try:
@@ -155,18 +154,21 @@ def get_data():
     
     study = get_and_validate_study_id(chunked_download=True)
     get_and_validate_researcher(study)
-    
+   
+ 
     query = {}
     determine_data_streams_for_db_query(query)  # select data streams
     determine_users_for_db_query(query)  # select users
     determine_time_range_for_db_query(query)  # construct time ranges
     
+
     # Do query (this is actually a generator)
     if "registry" in request.values:
         get_these_files = handle_database_query(study.pk, query, registry=parse_registry(request.values["registry"]))
     else:
         get_these_files = handle_database_query(study.pk, query, registry=None)
-    
+   
+ 
     # If the request is from the web form we need to indicate that it is an attachment,
     # and don't want to create a registry file.
     # Oddly, it is the presence of  mimetype=zip that causes the streaming response to actually stream.
@@ -271,11 +273,13 @@ def parse_registry(reg_dat):
 def determine_file_name(chunk):
     """ Generates the correct file name to provide the file with in the zip file.
         (This also includes the folder location files in the zip.) """
-    extension = chunk["chunk_path"][-3:]  # get 3 letter file extension from the source.
+    chunk_filename_dict = parse_filename
+    extension = chunk_filename_dict["file_extension"]
+
     if chunk["data_type"] == SURVEY_ANSWERS:
         # add the survey_id from the file path.
         return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                   chunk["chunk_path"].rsplit("/", 2)[1], # this is the survey id
+                                   chunk_filename_dict["survey_id"], # this is the survey id
                                    str(chunk["time_bin"]).replace(":", "_"), extension)
     
     elif chunk["data_type"] == IMAGE_FILE:
@@ -283,9 +287,9 @@ def determine_file_name(chunk):
         return "%s/%s/%s/%s/%s" % (
             chunk["participant__patient_id"],
             chunk["data_type"],
-            chunk["chunk_path"].rsplit("/", 3)[1], # this is the survey id
-            chunk["chunk_path"].rsplit("/", 2)[1], # this is the instance of the user taking a survey
-            chunk["chunk_path"].rsplit("/", 1)[1]
+            chunk_filename_dict['survey_id'], # this is the survey id
+            chunk_filename_dict['image_survey_user_instance'], # this is the instance of the user taking a survey
+            '.'.join([chunk_filename_dict['datetime'], chunk_filename_dict['ext']])
         )
     
     elif chunk["data_type"] == SURVEY_TIMINGS:
@@ -301,7 +305,7 @@ def determine_file_name(chunk):
         # When we don't find it, we revert to original behavior.
         if chunk["chunk_path"].count("/") == 4:  #
             return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                       chunk["chunk_path"].rsplit("/", 2)[1],  # this is the survey id
+                                       chunk_filename_dict['survey_id'],  # this is the survey id
                                        str(chunk["time_bin"]).replace(":", "_"), extension)
     
     # all other files have this form:
@@ -334,6 +338,7 @@ def determine_data_streams_for_db_query(query):
     Modifies the provided query object accordingly, there is no return value
     Throws a 404 if the data stream provided does not exist.
     :param query: expects a dictionary object. """
+
     if 'data_streams' in request.values:
         # the following two cases are for difference in content wrapping between
         # the CLI script and the download page.
@@ -368,9 +373,9 @@ def determine_time_range_for_db_query(query):
     Modifies the provided query object accordingly, there is no return value.
     Throws a 404 if a user provided does not exist.
     :param query: expects a dictionary object. """
-    if 'time_start' in request.values:
+    if 'time_start' in request.values and request.values['time_start']:
         query['start'] = str_to_datetime(request.values['time_start'])
-    if 'time_end' in request.values:
+    if 'time_end' in request.values and request.values['time_end']:
         query['end'] = str_to_datetime(request.values['time_end'])
 
 
