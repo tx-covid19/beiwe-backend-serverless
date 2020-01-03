@@ -31,7 +31,7 @@
                         </li>
                         {# Filtered list of studies #}
                         <li ng-repeat="study in navBarStudies | filter:{name: searchText}">
-                            <a href="/view_study/{% raw %}{{ study.id }}{% endraw %}">{% raw %}{{ study.name }}{% endraw %}</a></li>
+                            <a href="/view_study/{% raw %}{{ study.id }}{% endraw %}">{% raw %}{{ study.name }}{% endraw %}</a>
                         </li>
                     </ul>
                 </li>
@@ -42,6 +42,7 @@
             <ul class="nav navbar-nav navbar-right">
                 {# Give the System Admin an extra link here to manage researchers #}
                 {% if system_admin %}
+                    <li role="presentation"><a href="/manage_processing">Manage Processing</a></li>
                     <li role="presentation"><a href="/manage_researchers">Manage Researchers</a></li>
                     <li role="presentation"><a href="/manage_studies">Manage Studies</a></li>
                 {% endif %}
