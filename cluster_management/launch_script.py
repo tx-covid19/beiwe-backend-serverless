@@ -49,7 +49,7 @@ from deployment_helpers.constants import (
     LOCAL_INSTALL_CELERY_WORKER, LOCAL_PYENV_INSTALLER_FILE, LOG_FILE, PUSHED_FILES_FOLDER,
     REMOTE_APACHE_CONFIG_FILE_PATH, REMOTE_CRONJOB_FILE_PATH, REMOTE_GIT_KEY_PATH, REMOTE_HOME_DIR,
     REMOTE_INSTALL_CELERY_WORKER, REMOTE_PYENV_INSTALLER_FILE, REMOTE_USERNAME, STAGED_FILES,
-    USER_SPECIFIC_CONFIG_FOLDER)
+    USER_SPECIFIC_CONFIG_FOLDER, LOCAL_CELERY_USER, REMOTE_CELERY_USER, LOCAL_CELERY_CONFIGURATION, REMOTE_CELERY_CONFIGURATION)
 from deployment_helpers.general_utils import log, EXIT, current_time_string, do_zip_reduction, retry
 
 
@@ -153,9 +153,18 @@ def setup_python(using_pyenv=True):
             .format(home=REMOTE_HOME_DIR, log=LOG_FILE))
 
 
+def setup_celery_manager():
+    # Copy the script from the local repository onto the remote server,
+    # make it executable and execute it.
+    put(LOCAL_CELERY_USER, REMOTE_CELERY_USER)
+    put(LOCAL_CELERY_CONFIGURATION, REMOTE_CELERY_CONFIGURATION)
+    run('chmod +x {file}'.format(file=REMOTE_CELERY_CONFIGURATION))
+    run('{file} >> {log}'.format(file=REMOTE_CELERY_CONFIGURATION, log=LOG_FILE))
+
 def setup_celery_worker():
     # Copy the script from the local repository onto the remote server,
     # make it executable and execute it.
+    put(LOCAL_CELERY_USER, REMOTE_CELERY_USER)
     put(LOCAL_INSTALL_CELERY_WORKER, REMOTE_INSTALL_CELERY_WORKER)
     run('chmod +x {file}'.format(file=REMOTE_INSTALL_CELERY_WORKER))
     run('{file} >> {log}'.format(file=REMOTE_INSTALL_CELERY_WORKER, log=LOG_FILE))
@@ -188,7 +197,8 @@ def apt_installs(manager=False, single_server_ami=False):
     installs_string = " ".join(apt_install_list)
     
     sudo('apt-get -y update >> {log}'.format(log=LOG_FILE))
-    sudo('apt-get -y install {installs} >> {log}'.format(installs=installs_string, log=LOG_FILE))
+
+    retry(sudo, 'apt-get -y install {installs} >> {log}'.format(installs=installs_string, log=LOG_FILE))
 
 
 def push_beiwe_configuration(eb_environment_name, single_server_ami=False):
@@ -364,7 +374,9 @@ def do_create_manager():
         log.error(e)
         EXIT(1)
     public_ip = instance['NetworkInterfaces'][0]['PrivateIpAddresses'][0]['Association']['PublicIp']
-    
+
+    log.info("Finished creating manager server for %s..." % name)
+
     # TODO: fabric up the rabbitmq and cron task, ensure other servers can connect, watch data process
     configure_fabric(name, public_ip)
     push_files()
@@ -373,6 +385,8 @@ def do_create_manager():
     setup_python()
     push_beiwe_configuration(name)
     push_manager_private_ip(name)
+    # CC add script to create rabbitmq user
+    setup_celery_manager()
     setup_manager_cron()
 
 
@@ -380,9 +394,15 @@ def do_create_worker():
     name = prompt_for_extant_eb_environment_name()
     do_fail_if_environment_does_not_exist(name)
     manager_instance = get_manager_instance_by_eb_environment_name(name)
-    if manager_instance is None or manager_instance['State']['Name'] != 'running':
+    if manager_instance is None :
         log.error(
             "There is no manager server for the %s cluster, cannot deploy a worker until there is." % name)
+        EXIT(1)
+
+    if manager_instance['State']['Name'] != 'running':
+        log.error(
+            "There is a manager server for the %s cluster, but it is not in the running state (%s)." % (name,
+                                                                                                        manager_instance['State']['Name'] ))
         EXIT(1)
     
     manager_public_ip = get_manager_public_ip(name)
@@ -545,7 +565,7 @@ if __name__ == "__main__":
     if arguments.fix_health_checks_blocking_deployment:
         do_fix_health_checks()
         EXIT(0)
-    
+
     if arguments.purge_instance_profiles:
         print purge_command_blurb, "\n\n\n"
         iam_purge_instance_profiles()
