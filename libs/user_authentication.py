@@ -37,10 +37,17 @@ def validate_post_ignore_password(is_ios):
     # Disabled
     # if not participant.validate_password(request.values['password']):
     #     return False
-    # Only execute if it is an android device
-    if not is_ios and not participant.device_id == request.values['device_id']:
-        print "device_id is wrong"
+
+    # if participant is not registered for a study, reject them
+    if participant.device_id == '':
+        print "participant is not registered"
         return False
+
+
+    # Only execute if it is an android device
+    #if not is_ios and not participant.device_id == request.values['device_id']:
+        #print "device_id is wrong"
+        #return False
     return True
 
 ####################################################################################################
