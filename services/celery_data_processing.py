@@ -7,6 +7,7 @@ _imp.load_source("__init__", _current_folder_init)
 from kombu.exceptions import OperationalError
 from celery import Celery, states
 from celery.states import SUCCESS
+import json
 
 STARTED_OR_WAITING = [states.PENDING, states.RECEIVED, states.STARTED]
 
@@ -19,11 +20,15 @@ except IOError:
     print "could not load the manager ip file, defaulting to 127.0.0.1"
     manager_ip = "127.0.0.1"
 
+
+with open("/home/ubuntu/rabbitmq.json", 'r') as f:
+    rabbitmq_config = json.load(f)
+
 celery_app = Celery("data_processing_tasks",
-                    broker='pyamqp://guest@%s//' % manager_ip,
+                    broker='pyamqp://%s:%s@%s//' % (rabbitmq_config["user"], rabbitmq_config["password"], manager_ip),
                     backend='rpc://',
                     task_publish_retry=False,
-                    task_track_started=True )
+                    task_track_started=True)
 
 # Load Django
 from config import load_django
