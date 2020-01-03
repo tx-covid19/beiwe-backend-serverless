@@ -3,20 +3,13 @@ from flask import abort, Blueprint, make_response, request, redirect, json
 from libs.admin_authentication import authenticate_admin_study_access
 from libs.json_logic import do_validate_survey
 from database.study_models import Survey
+import re
 
 survey_api = Blueprint('survey_api', __name__)
 
 ################################################################################
 ############################## Creation/Deletion ###############################
 ################################################################################
-
-
-@survey_api.route('/create_survey/<string:study_id>/<string:survey_type>', methods=['GET', 'POST'])
-@authenticate_admin_study_access
-def create_survey(study_id=None, survey_type='tracking_survey'):
-    new_survey = Survey.create_with_settings(study_id=study_id, survey_type=survey_type)
-    return redirect('edit_survey/{:d}'.format(new_survey.id))
-
 
 @survey_api.route('/delete_survey/<string:survey_id>', methods=['GET', 'POST'])
 @authenticate_admin_study_access
@@ -71,6 +64,7 @@ def recursive_survey_content_json_decode(json_entity):
         count -= 1
         if count < 0:
             raise Exception("could not decode json entity to list")
+        json_entity = '\\n'.join([re.sub(r'\\+','', t) for t in json_entity.split(u'\\n')]).strip('"')
         decoded_json = json.loads(json_entity)
     return decoded_json
 
