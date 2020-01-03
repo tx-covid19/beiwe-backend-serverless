@@ -105,7 +105,8 @@ def run(repo_uri, ami_id):
         GroupName=security_group,
     )
     group_id = resp['GroupId']
-    compute_environment_dict['securityGroupIds'] = [group_id]
+    # add in the group id for the DB access group, value is hard coded here, but might be able to query for it in the future
+    compute_environment_dict['securityGroupIds'] = ['sg-01234567890abcdef', group_id]
     
     # Create the batch compute environment
     batch_client = boto3.client('batch')
