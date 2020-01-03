@@ -33,6 +33,8 @@ class ChunkRegistry(AbstractModel):
     study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='chunk_registries', db_index=True)
     participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='chunk_registries', db_index=True)
     survey = models.ForeignKey('Survey', blank=True, null=True, on_delete=models.PROTECT, related_name='chunk_registries', db_index=True)
+
+    number_of_observations = models.PositiveIntegerField(blank=True, null=True)
     
     @classmethod
     def register_chunked_data(cls, data_type, time_bin, chunk_path, file_contents, study_id, participant_id, survey_id=None):
@@ -40,7 +42,15 @@ class ChunkRegistry(AbstractModel):
         if data_type not in CHUNKABLE_FILES:
             raise UnchunkableDataTypeError
 
+        # we want to make sure that there are no extraneous newline characters at the
+        # end of the line. we want the line to end in exactly one newline character
+        file_contents = file_contents.rstrip('\n') + '\n'
+
+        # we subtract one to exclude the header line
+        chunk_file_number_of_observations = file_contents.count('\n') - 1
+
         chunk_hash_str = chunk_hash(file_contents)
+
         
         time_bin = int(time_bin) * CHUNK_TIMESLICE_QUANTUM
         time_bin = timezone.make_aware(datetime.utcfromtimestamp(time_bin), timezone.utc)
@@ -63,6 +73,7 @@ class ChunkRegistry(AbstractModel):
             study_id=study_id,
             participant_id=participant_id,
             survey_id=survey_id,
+            number_of_observations=chunk_file_number_of_observations
         )
     
     @classmethod
@@ -73,6 +84,13 @@ class ChunkRegistry(AbstractModel):
         if data_type in CHUNKABLE_FILES:
             raise ChunkableDataTypeError
         
+        # we want to make sure that there are no extraneous newline characters at the
+        # end of the line. we want the line to end in exactly one newline character
+        file_contents = file_contents.rstrip('\n') + '\n'
+
+        # we subtract one to exclude the header line
+        chunk_file_number_of_observations = file_contents.count('\n') - 1
+
         cls.objects.create(
             is_chunkable=False,
             chunk_path=chunk_path,
@@ -82,6 +100,7 @@ class ChunkRegistry(AbstractModel):
             study_id=study_id,
             participant_id=participant_id,
             survey_id=survey_id,
+            number_of_observations=chunk_file_number_of_observations
         )
 
     @classmethod
@@ -92,7 +111,7 @@ class ChunkRegistry(AbstractModel):
         provided.
         """
 
-        query = {'study_id': study_id}
+        query = {'study_id': study_id, 'deleted': False}
         if user_ids:
             query['participant__patient_id__in'] = user_ids
         if data_types:
@@ -104,11 +123,27 @@ class ChunkRegistry(AbstractModel):
         return cls.objects.filter(**query)
 
     def update_chunk_hash(self, data_to_hash):
+        # we want to make sure that there are no extraneous newline characters at the
+        # end of the line. we want the line to end in exactly one newline character
+        data_to_hash = data_to_hash.rstrip('\n') + '\n'
+
+        # we subtract one to exclude the header line
+        chunk_file_number_of_observations = data_to_hash.count('\n') - 1
+
         self.chunk_hash = chunk_hash(data_to_hash)
+        self.number_of_observations = chunk_file_number_of_observations
         self.save()
 
     def low_memory_update_chunk_hash(self, list_data_to_hash):
-        self.chunk_hash = low_memory_chunk_hash(list_data_to_hash)
+        # we want to make sure that there are no extraneous newline characters at the
+        # end of the line. we want the line to end in exactly one newline character
+        data_to_hash = list_data_to_hash[0].rstrip('\n') + '\n'
+
+        # we subtract one to exclude the header line
+        chunk_file_number_of_observations = data_to_hash.count('\n') - 1
+
+        self.chunk_hash = low_memory_chunk_hash([data_to_hash])
+        self.number_of_observations = chunk_file_number_of_observations
         self.save()
 
 
@@ -124,10 +159,10 @@ class FileToProcess(AbstractModel):
         # Get the study's primary key
         study_pk = Study.objects.filter(object_id=study_object_id).values_list('pk', flat=True).get()
         
-        if file_path[:24] == study_object_id:
-            cls.objects.create(s3_file_path=file_path, study_id=study_pk, **kwargs)
-        else:
-            cls.objects.create(s3_file_path=study_object_id + '/' + file_path, study_id=study_pk, **kwargs)
+        #if file_path[:24] == study_object_id:
+        cls.objects.create(s3_file_path=file_path, study_id=study_pk, **kwargs)
+        #else:
+            #cls.objects.create(s3_file_path=study_object_id + '/' + file_path, study_id=study_pk, **kwargs)
 
 
 class FileProcessLock(AbstractModel):
