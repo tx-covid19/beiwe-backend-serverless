@@ -9,16 +9,27 @@ from datetime import datetime
 
 # noinspection PyUnresolvedReferences
 from config import load_django
+from config import constants
 from config.constants import (ANDROID_LOG_FILE, UPLOAD_FILE_TYPE_MAPPING, API_TIME_FORMAT,
     IDENTIFIERS,
     WIFI, CALL_LOG, CHUNK_TIMESLICE_QUANTUM, FILE_PROCESS_PAGE_SIZE, SURVEY_TIMINGS, ACCELEROMETER,
-    SURVEY_DATA_FILES, CONCURRENT_NETWORK_OPS, CHUNKS_FOLDER, CHUNKABLE_FILES,
+    SURVEY_DATA_FILES, CONCURRENT_NETWORK_OPS, KEY_FOLDER, RAW_DATA_FOLDER, CHUNKS_FOLDER, CHUNKABLE_FILES,
     DATA_PROCESSING_NO_ERROR_STRING, IOS_LOG_FILE)
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 from database.user_models import Participant
 from database.study_models import Survey
-from libs.s3 import s3_retrieve, s3_upload
+from .s3 import s3_retrieve, s3_upload, s3_move, s3_exists, construct_s3_key_paths, construct_s3_chunk_path, construct_s3_chunk_path_from_raw_data_path, unix_time_to_string
+from libs.client_key_management import create_client_key_pair
 
+import json
+import os
+
+import logging
+logging.basicConfig()
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+from .parse_filename import resolve_survey_id_from_file_name
 
 class EverythingWentFine(Exception): pass
 class ProcessingOverlapError(Exception): pass
@@ -26,6 +37,44 @@ class ProcessingOverlapError(Exception): pass
 
 """########################## Hourly Update Tasks ###########################"""
 
+def process_file_chunks_lambda():
+    """
+    This is the function that is called from the command line.  It runs through all new files
+    that have been uploaded and 'chunks' them. Handles logic for skipping bad files, raising
+    errors appropriately.
+    This is primarily called manually during testing and debugging.
+    """
+    # Initialize the process and ensure there is no other process running at the same time
+    error_handler = ErrorHandler()
+    if FileProcessLock.islocked():
+        raise ProcessingOverlapError("Data processing overlapped with a previous data indexing run.")
+    FileProcessLock.lock()
+
+    try:
+        number_bad_files = 0
+
+        # Get the list of participants with open files to process
+        participants = Participant.objects.filter(files_to_process__isnull=False).distinct()
+        print("processing files for the following users: %s" % ",".join(participants.values_list('patient_id', flat=True)))
+
+        for participant in participants:
+            for fp in participant.files_to_process.all():
+                print(fp.s3_file_path)
+                event={'Records': [{
+                    's3':{
+                        'object':{
+                            'key': fp.s3_file_path
+                        }
+                    }
+                }]}
+
+                chunk_file_lambda_handler(event, [])
+
+    finally:
+        FileProcessLock.unlock()
+
+    error_handler.raise_errors()
+    raise EverythingWentFine(DATA_PROCESSING_NO_ERROR_STRING)
 
 def process_file_chunks():
     """
@@ -75,6 +124,176 @@ def process_file_chunks():
     error_handler.raise_errors()
     raise EverythingWentFine(DATA_PROCESSING_NO_ERROR_STRING)
 
+
+def chunk_file_lambda_handler(event, context):
+
+    error_handler = ErrorHandler()
+
+    # Declare a defaultdict containing a tuple of two double ended queues (deque, pronounced "deck")
+    all_binified_data = defaultdict(lambda: (deque(), deque()))
+    ftps_to_remove = set()
+    # The ThreadPool enables downloading multiple files simultaneously from the network, and continuing
+    # to download files as other files are being processed, making the code as a whole run faster.
+    survey_id_dict = {}
+
+    for record in event['Records']:
+        full_s3_path = record['s3']['object']['key']
+        key_values = full_s3_path.split('/')
+
+        # there was a bug that would incorrectly preprend the s3_path with the study_object_id
+        # lets try to undo that here
+        if 'RAW_DATA' not in key_values[0]:
+
+            key_values = key_values[key_values.index('RAW_DATA'):]
+
+            #logger.error('S3 path {0} does not appear to be in RAW_DATA'.format(full_s3_path))
+            #return {
+                #'statusCode': 200,
+                #'body': json.dumps('False positive!')
+            #}
+          
+        study_object_id = key_values[1]
+        participant_id = key_values[2]
+
+        try:
+            participant = Participant.objects.get(patient_id = participant_id)
+        except Participant.DoesNotExist as e:
+            logger.error('Could not find participant {0} for file to process {1}'.format(participant_id, full_s3_path))
+            return {
+                'statusCode': 200,
+                'body': json.dumps('Lambda failed!')
+            }
+
+        # an file with no extension means we may need to create RSA keys for this participant
+        # lets investigate!
+        _, file_extension = os.path.splitext(full_s3_path)
+        if not file_extension:
+
+            # first check to see if a key pair already exists
+            key_paths = construct_s3_key_paths(study_object_id, participant_id)
+            logger.info('Look to see if keys already exist at: {}'.format(key_paths))
+
+            if s3_exists(key_paths['private'], study_object_id, raw_path=True) and \
+               s3_exists(key_paths['public'], study_object_id, raw_path=True):
+
+                logger.error('Key pair already exists for {0}: {1}'.format(study_object_id, participant_id))
+
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Key pair already exists for {0}: {1}'.format(study_object_id, participant_id))
+                }
+               
+            else:
+                logger.info('Generating key pair for {0}: {1}'.format(study_object_id, participant_id))
+                create_client_key_pair(participant_id, study_object_id)
+
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Created key pair for {0}: {1}'.format(study_object_id, participant_id))
+                }
+               
+        else:
+
+            try:
+                file_to_process = participant.files_to_process.get(s3_file_path=full_s3_path)
+            except FileToProcess.MultipleObjectsReturned as e:
+                # sometimes there are multiple entries on files_to_process with the same s3 path,
+                # i am not sure why this happens, but i think that it could be OK just to 
+                # take the first and delete the others 
+                the_first_file = True
+                for fp in participant.files_to_process.filter(s3_file_path=full_s3_path):
+                    if the_first_file == True:
+                        file_to_process = fp
+                        the_first_file = False
+                    else:
+                        ftps_to_remove.add(fp.id)
+            except FileToProcess.DoesNotExist as e:
+                logger.error('Could not find file to process {0} for participant {1}'.format(full_s3_path, participant_id))
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Lambda failed!')
+                }
+
+            # some paths were corrupted by prepending the study object id to the correct path, remove this
+            if 'RAW_DATA' not in file_to_process.s3_file_path[0:8]:
+                path_vals = file_to_process.s3_file_path.split('/')
+                file_to_process.s3_file_path = '/'.join(path_vals[path_vals.index('RAW_DATA'):])
+                file_to_process.save()
+
+            data = batch_retrieve_for_processing(file_to_process)
+
+            #with error_handler:
+            # If we encountered any errors in retrieving the files for processing, they have been
+            # lumped together into data['exception']. Raise them here to the error handler and
+            # move to the next file.
+            if data['exception']:
+                logger.error("\n" + data['ftp']['s3_file_path'])
+                logger.error(data['traceback'])
+                ################################################################
+                # YOU ARE SEEING THIS EXCEPTION WITHOUT A STACK TRACE
+                # BECAUSE IT OCCURRED INSIDE POOL.MAP, ON ANOTHER THREAD
+                ################################################################
+                raise data['exception']
+
+            if data['chunkable']:
+                # print "1a"
+                newly_binified_data, survey_id_hash = process_csv_data(data)
+                # print data, "\n1b"
+                if data['data_type'] in SURVEY_DATA_FILES:
+                    # print survey_id_hash
+                    survey_id_dict[survey_id_hash] = resolve_survey_id_from_file_name(data['ftp']["s3_file_path"])
+
+                if newly_binified_data:
+                    # print "1c"
+                    append_binified_csvs(all_binified_data, newly_binified_data, data['ftp'])
+                else:  # delete empty files from FilesToProcess
+                    # print "1d"
+                    ftps_to_remove.add(data['ftp']['id'])
+
+            else:  # if not data['chunkable']
+                # print "2a"
+                timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
+
+                chunked_file_path = construct_s3_chunk_path_from_raw_data_path(data['ftp']['s3_file_path'])
+
+                try:
+                    s3_move(data['ftp']['s3_file_path'], chunked_file_path, data['ftp']['study'].object_id, raw_path=True)
+
+                    # print "2a"
+                    # Since we aren't binning the data by hour, just create a ChunkRegistry that
+                    # points to the already existing S3 file.
+                    ChunkRegistry.register_unchunked_data(
+                        data['data_type'],
+                        timestamp,
+                        chunked_file_path,
+                        data['ftp']['study'].pk,
+                        data['ftp']['participant'].pk,
+                    )
+                    # print "2b"
+                except:
+                   print("Could not find s3 file {0}, removing it as a file to process".format(data['ftp']['s3_file_path']))
+
+                ftps_to_remove.add(data['ftp']['id'])
+
+    #print(newly_binified_data)
+    # print 3
+    more_ftps_to_remove, number_bad_files = upload_binified_data(all_binified_data, error_handler, survey_id_dict)
+    # print "X"
+    ftps_to_remove.update(more_ftps_to_remove)
+    # Actually delete the processed FTPs from the database
+    FileToProcess.objects.filter(pk__in=ftps_to_remove).delete()
+    # print "Y"
+
+    # delete the file that triggered the labmda
+    #s3_delete(full_s3_path,'',raw_path=True)
+
+    # Garbage collect to free up memory
+    gc.collect()
+    # print "Z"
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
 
 def do_process_user_file_chunks(count, error_handler, skip_count, participant):
     """
@@ -146,12 +365,16 @@ def do_process_user_file_chunks(count, error_handler, skip_count, participant):
                 # print "2a"
                 timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
                 # print "2a"
+                chunked_file_path = construct_s3_chunk_path_from_raw_data_path(data['ftp']['s3_file_path'])
+
+                s3_move(data['ftp']['s3_file_path'], chunked_file_path, data['ftp']['study'].object_id)
+
                 # Since we aren't binning the data by hour, just create a ChunkRegistry that
                 # points to the already existing S3 file.
                 ChunkRegistry.register_unchunked_data(
                     data['data_type'],
                     timestamp,
-                    data['ftp']['s3_file_path'],
+                    chunked_file_path,
                     data['ftp']['study'].pk,
                     data['ftp']['participant'].pk,
                 )
@@ -195,9 +418,17 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
                 # print 6
                 chunk_path = construct_s3_chunk_path(study_id, user_id, data_type, time_bin)
                 # print 7
-                old_chunk_exists = ChunkRegistry.objects.filter(chunk_path=chunk_path).exists()
-                if old_chunk_exists:
+                old_chunks = ChunkRegistry.objects.filter(chunk_path=chunk_path)
+
+                if old_chunks.exists():
+
+                    # if there are more than one chunk with the same path, 
+                    # winnow it down to one 
+                    while ChunkRegistry.objects.filter(chunk_path=chunk_path).count() > 1:
+                        ChunkRegistry.objects.filter(chunk_path=chunk_path)[0].delete()
+
                     chunk = ChunkRegistry.objects.get(chunk_path=chunk_path)
+
                     try:
                         # print 8
                         # print chunk_path
@@ -304,15 +535,6 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
     return ftps_to_retire.difference(failed_ftps), len(failed_ftps)
 
 
-"""################################ S3 Stuff ################################"""
-
-
-def construct_s3_chunk_path(study_id, user_id, data_type, time_bin):
-    """ S3 file paths for chunks are of this form:
-        CHUNKED_DATA/study_id/user_id/data_type/time_bin.csv """
-    return "%s/%s/%s/%s/%s.csv" % (CHUNKS_FOLDER, study_id, user_id, data_type,
-        unix_time_to_string(time_bin*CHUNK_TIMESLICE_QUANTUM) )
-
 """################################# Key ####################################"""
 
 
@@ -336,12 +558,10 @@ def file_path_to_data_type(file_path):
     # raise an error
     raise Exception("data type unknown: %s" % file_path)
 
-
 def ensure_sorted_by_timestamp(l):
     """ According to the docs the sort method on a list is in place and should
         faster, this is how to declare a sort by the first column (timestamp). """
     l.sort(key = lambda x: int(x[0]))
-
 
 def convert_unix_to_human_readable_timestamps(header, rows):
     """ Adds a new column to the end which is the unix time represented in
@@ -362,11 +582,6 @@ def binify_from_timecode(unix_ish_time_code_string):
         integer value of the bin it should go in. """
     actually_a_timecode = clean_java_timecode(unix_ish_time_code_string) # clean java time codes...
     return actually_a_timecode / CHUNK_TIMESLICE_QUANTUM #separate into nice, clean hourly chunks!
-
-
-def resolve_survey_id_from_file_name(name):
-    return name.rsplit("/", 2)[1]
-
 
 """############################## Standard CSVs #############################"""
 
@@ -597,9 +812,6 @@ def clean_java_timecode(java_time_code_string):
     """ converts millisecond time (string) to an integer normal unix time. """
     return int(java_time_code_string[:10])
 
-def unix_time_to_string(unix_time):
-    return datetime.utcfromtimestamp(unix_time).strftime( API_TIME_FORMAT )
-
 
 """ Batch Operations """
 
@@ -608,6 +820,11 @@ def batch_retrieve_for_processing(ftp_as_object):
     """ Used for mapping an s3_retrieve function. """
     # Convert the ftp object to a dict so we can use __getattr__
     ftp = ftp_as_object.as_dict()
+
+    # correct the s3 file path
+    if 'RAW_DATA' not in ftp['s3_file_path'][0:8]:
+        vals = ftp['s3_file_path'].split('/')
+        ftp['s3_file_path'] = '/'.join(vals[vals.index('RAW_DATA'):])
     
     data_type = file_path_to_data_type(ftp['s3_file_path'])
     
@@ -617,6 +834,7 @@ def batch_retrieve_for_processing(ftp_as_object):
            'exception': None,
            "file_contents": "",
            "traceback": None}
+
     if data_type in CHUNKABLE_FILES:
         ret['chunkable'] = True
         # Try to retrieve the file contents. If any errors are raised, store them to be raised by the parent function
@@ -630,6 +848,7 @@ def batch_retrieve_for_processing(ftp_as_object):
         # We don't do anything with unchunkable data.
         ret['chunkable'] = False
         ret['file_contents'] = ""
+
     return ret
 
 
