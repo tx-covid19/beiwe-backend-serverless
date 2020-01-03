@@ -56,8 +56,12 @@ def create_survey_archive(sender, **kwargs):
         survey_dirty = False
     
     for shared_field in survey_fields:
+
         # Update all of the shared fields in the archive to have the original survey's values
-        setattr(new_archive, shared_field, getattr(my_survey, shared_field))
+        if shared_field == 'name':
+            setattr(new_archive, shared_field, '{0} {1}'.format(getattr(my_survey, shared_field), timezone.now().isoformat()))
+        else: 
+            setattr(new_archive, shared_field, getattr(my_survey, shared_field))
         
         if not survey_dirty and getattr(my_survey, shared_field) != getattr(last_archive, shared_field):
             # If the survey has been edited since the last archive was made, mark the survey as
