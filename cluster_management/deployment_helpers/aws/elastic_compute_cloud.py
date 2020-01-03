@@ -28,6 +28,7 @@ def get_instance_by_id(instance_id):
 
 def get_manager_private_ip(eb_environment_name):
     instance = get_manager_instance_by_eb_environment_name(eb_environment_name)
+    print instance['NetworkInterfaces']
     return instance['NetworkInterfaces'][0]['PrivateIpAddress']
 
 
@@ -41,6 +42,7 @@ def get_manager_public_ip(eb_environment_name):
 
 def get_manager_instance_by_eb_environment_name(eb_environment_name):
     manager = get_instances_by_name(PROCESSING_MANAGER_NAME % eb_environment_name)
+
     if len(manager) > 1:
         log.error("discovered multiple manager servers.  This configuration is not supported and should be corrected.")
     try:
@@ -57,8 +59,16 @@ def get_instances_by_name(instance_name):
                 {'Name': 'tag:Name',
                  'Values': [instance_name]}]
           )
+
+    index = 0
+    if 'Reservations' in ret and ret['Reservations'] and len(ret['Reservations']) > 0:
+        while ret['Reservations'][index]['Instances'][0]['State']['Name'] != "running":
+            index += 1
+            if index >= len(ret['Reservations']):
+                break
+
     try:
-        return ret['Reservations'][0]["Instances"]
+        return ret['Reservations'][index]["Instances"]
     except IndexError:
         log.warn("could not find any instances matching the name '%s'" % instance_name)
         return []
@@ -216,18 +226,23 @@ def create_processing_control_server(eb_environment_name, aws_server_type):
     get_rds_security_groups_by_eb_name(eb_environment_name)["instance_sec_grp"]['GroupId']
     
     # TODO: functions that terminate all worker and all manager servers for an environment
-    
+    log.info("creating processing control server for %s..." % eb_environment_name)
+
     manager_info = get_manager_instance_by_eb_environment_name(eb_environment_name)
+
     if manager_info is not None and manager_info['State']['Name'] != 'terminated':
         if manager_info['InstanceType'] == aws_server_type:
             msg = "A manager server, %s, already exists for this environment, and it is of the provided type (%s)." % (manager_info['InstanceId'], aws_server_type)
         else:
             msg = "A manager server, %s, already exists for this environment." % manager_info['InstanceId']
         log.error(msg)
-        msg = "You must terminate all worker and manager servers before you can create a new manager."
+        msg = "Continuing with existing manager."
+        # msg = "You must terminate all worker and manager servers before you can create a new manager."
         log.error(msg)
         sleep(0.1)  # sometimes log has problems if you don't give it a second, the error messages above are critical
-        raise Exception(msg)
+        return manager_info
+
+        # raise Exception(msg)
     
     rabbit_mq_sec_grp_id = get_or_create_rabbit_mq_security_group(eb_environment_name)['GroupId']
     instance_sec_grp_id = get_rds_security_groups_by_eb_name(eb_environment_name)["instance_sec_grp"]['GroupId']
