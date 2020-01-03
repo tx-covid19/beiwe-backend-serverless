@@ -1,6 +1,6 @@
 import base64
 from Crypto.Cipher import AES
-from libs.s3 import get_client_private_key
+from libs.client_key_management import get_client_private_key
 user = some_user
 private_key = get_client_private_key(user._id, user['study_id'])
 
