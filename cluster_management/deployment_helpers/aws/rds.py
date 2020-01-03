@@ -134,9 +134,23 @@ def add_eb_environment_to_rds_database_security_group(eb_environment_name, eb_se
 
 def get_most_recent_postgres_engine():
     rds_client = create_rds_client()
-    for engine in reversed(rds_client.describe_db_engine_versions()['DBEngineVersions']):
-        if 'postgres' == engine["Engine"]:
-            return engine
+
+    engine_count = 0
+    the_engine = []
+
+    db_engine_descriptions = rds_client.describe_db_engine_versions(Engine='postgres')
+
+    for engine in reversed(db_engine_descriptions['DBEngineVersions']):
+        if engine and "Engine" in engine:
+            if engine["Engine"] == 'postgres':
+                the_engine = engine
+                break
+            engine_count += 1
+
+    if not the_engine:
+        raise RuntimeError("Couldn't find postgres in the {0} engines returned".format(engine_count))
+
+    return the_engine
 
 
 def get_db_info(eb_environment_name):
