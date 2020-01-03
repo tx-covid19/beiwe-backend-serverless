@@ -9,6 +9,7 @@ from config.settings import DOMAIN_NAME
 # DEFAULT_S3_RETRIES = getenv("DEFAULT_S3_RETRIES") or 10
 # Note that this file is _not_ in the gitignore.
 
+
 ## Networking
 #This value is used in libs.s3, does what it says.
 DEFAULT_S3_RETRIES = getenv("DEFAULT_S3_RETRIES") or 1
@@ -80,20 +81,57 @@ API_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 """1990-01-31T07:30:04 gets you jan 31 1990 at 7:30:04am
    human string is YYYY-MM-DDThh:mm:ss """
 
+## PATH construction
+#
+CHUNK_PATH_MAPPING = {
+    "STUDY_ID_INDEX": 1,
+    "PATIENT_ID_INDEX": 2,
+    "DATA_TYPE_INDEX": 3,
+    "SURVEY_ID_INDEX": 4,
+    "IMAGE_SURVEY_USER_INSTANCE": 5,
+    "FILE_NAME_INDEX": -1
+}
+
+NEW_RAW_PATH_MAPPING = {
+    "STUDY_ID_INDEX": 1,
+    "PATIENT_ID_INDEX": 2,
+    "DATA_TYPE_INDEX": 3,
+    "SURVEY_ID_INDEX": 4,
+    "IMAGE_SURVEY_USER_INSTANCE": 5,
+    "FILE_NAME_INDEX": -1
+}
+
+OLD_RAW_PATH_MAPPING = {
+    "STUDY_ID_INDEX": 0,
+    "PATIENT_ID_INDEX": 1,
+    "DATA_TYPE_INDEX": 2,
+    "SURVEY_ID_INDEX": 3,
+    "IMAGE_SURVEY_USER_INSTANCE": 4,
+    "FILE_NAME_INDEX": -1
+}
+
+RAW_DATA = "RAW_DATA"
+CHUNK_DATA = "CHUNK_DATA"
+REGISTRATION_MARKER = "REGISTRATION_MARKER"
+
 ## Chunks
 # This value is in seconds, it sets the time period that chunked files will be sliced into.
 CHUNK_TIMESLICE_QUANTUM = 3600
 # the name of the s3 folder that contains chunked data
+KEY_FOLDER = "KEYS"
 CHUNKS_FOLDER = "CHUNKED_DATA"
 PIPELINE_FOLDER = "PIPELINE_DATA"
+RAW_DATA_FOLDER = "RAW_DATA"
 
 ## Constants for for the keys in data_stream_to_s3_file_name_string
 ACCELEROMETER = "accelerometer"
+ANDROID_LOG_FILE = "app_log"
 BLUETOOTH = "bluetooth"
 CALL_LOG = "calls"
+DEVICEMOTION = "devicemotion"
 GPS = "gps"
+GYRO = "gyro"
 IDENTIFIERS = "identifiers"
-ANDROID_LOG_FILE = "app_log"
 IOS_LOG_FILE = "ios_log"
 POWER_STATE = "power_state"
 SURVEY_ANSWERS = "survey_answers"
@@ -103,12 +141,8 @@ VOICE_RECORDING = "audio_recordings"
 IMAGE_FILE = "image_survey"
 WIFI = "wifi"
 PROXIMITY = "proximity"
-GYRO = "gyro"
 MAGNETOMETER = "magnetometer"
-DEVICEMOTION = "devicemotion"
 REACHABILITY = "reachability"
-
-
 
 ALL_DATA_STREAMS = [ACCELEROMETER,
                     BLUETOOTH,
@@ -250,3 +284,4 @@ ITERATIONS = 1000  # number of SHA iterations in password hashing
 # Error reporting send-from emails
 E500_EMAIL_ADDRESS = 'e500_error@{}'.format(DOMAIN_NAME)
 OTHER_EMAIL_ADDRESS = 'telegram_service@{}'.format(DOMAIN_NAME)
+SYSTEM_EMAIL_ADDRESS = 'utbeiwe@gmail.com'
