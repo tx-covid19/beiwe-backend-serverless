@@ -10,7 +10,14 @@ from libs.admin_authentication import authenticate_admin_login,\
 from libs.security import check_password_requirements
 
 from database.study_models import Study
-from database.user_models import Researcher
+from database.user_models import Researcher, ParticipantAliases, Participant
+from database.data_access_models import ChunkRegistry
+from database.profiling_models import ReceivedDataStats
+from datetime import datetime
+from collections import OrderedDict
+import numpy
+import sys 
+import pytz
 
 admin_pages = Blueprint('admin_pages', __name__)
 
@@ -35,23 +42,193 @@ def choose_study():
         system_admin=admin_is_system_admin()
     )
 
+@admin_pages.route('/create_new_alias/<string:study_id>', methods=['GET', 'POST'])
+@authenticate_admin_study_access
+def create_new_alias(study_id=None):
+    if request.method == 'GET':
+        return render_template(
+            'create_new_alias.html',
+            study_id=study_id,
+            allowed_studies=get_admins_allowed_studies(),
+            system_admin=admin_is_system_admin()
+        )
+
+    # Drop any whitespace or special characters from the username
+    reference_id = ''.join(e for e in request.form.get('reference_id', '') if e.isalnum())
+    alias_id = ''.join(e for e in request.form.get('alias_id', '') if e.isalnum())
+
+    for participant_id in [reference_id, alias_id]:
+        if not Participant.objects.filter(patient_id=participant_id).exists():
+            flash('ID {0} was not found in the Participant database, alias was not added to database'.format(participant_id), 'danger')
+            return redirect('/create_new_alias/{:d}'.format(int(study_id)))
+
+    if ParticipantAliases.objects.filter(reference_id=reference_id, alias_id=alias_id).exists():
+        flash("There is already an alias {0} => {1}".format(reference_id, alias_id), 'danger')
+        return redirect('/create_new_alias/{:d}'.format(int(study_id)))
+
+    try:
+        new_alias = ParticipantAliases(study_id=study_id, reference_id=reference_id, alias_id=alias_id)
+        new_alias.save()
+    except:
+        flash("Error, There is a problem with one or both of the entered IDs ({0}, {1}). They should be 8 character alphanumeric strings.".format(reference_id, alias_id), 'danger')
+        return redirect('/create_new_alias/{:d}'.format(int(study_id)))
+
+    return redirect('/view_study/{:d}'.format(int(study_id)))
+
+@admin_pages.route('/delete_alias', methods=["POST"])
+@authenticate_admin_study_access
+def delete_alias():
+    """
+    Deletes an alias from the ParticipantsAlias table
+    """
+
+    alias_id = request.values['alias_id']
+    study_id = request.values['study_id']
+    try:
+        ParticipantAliases.objects.filter(id=alias_id).delete()
+    except:
+        flash('Sorry, something went wrong when trying to delete the alias.', 'danger')
+
+    return redirect('/view_study/{:s}'.format(study_id))
 
 @admin_pages.route('/view_study/<string:study_id>', methods=['GET'])
 @authenticate_admin_study_access
 def view_study(study_id=None):
+
+    settings_strings = { 'accelerometer': 'Accelerometer', 'bluetooth': 'Bluetooth', 'calls': 'Calls', 'gps': 'GPS', 
+        'identifiers': 'Identifiers', 'app_log': 'Android Log', 'ios_log': 'IOS Log', 'power_state': 'Power State', 
+        'survey_answers': 'Survey Answers', 'survey_timings': 'Survey Timings', 'texts': 'Texts', 
+        'audio_recordings': 'Audio Recordings', 'image_survey': 'Image Survey', 'wifi': 'Wifi', 'proximity': 'Proximity', 
+        'gyro': 'Gyro', 'magnetometer': 'Magnetometer', 'devicemotion': 'Device Motion', 'reachability': 'Reachability' }
     study = Study.objects.get(pk=study_id)
+    settings = study.get_study_device_settings().as_native_python()
+    data_types_dict = {}
+    for setting_key, setting_label in settings_strings.items():
+        if setting_key in settings and settings[setting_key] is True:
+            data_types_dict[setting_key] = setting_label
     tracking_survey_ids = study.get_survey_ids_and_object_ids_for_study('tracking_survey')
+    if len(tracking_survey_ids) > 0:
+        data_types_dict['survey_answers'] = settings_strings['survey_answers']
+        data_types_dict['survey_timings'] = settings_strings['survey_timings']
     audio_survey_ids = study.get_survey_ids_and_object_ids_for_study('audio_survey')
+    if len(audio_survey_ids) > 0:
+        data_types_dict['audio_recordings'] = settings_strings['audio_recordings']
     image_survey_ids = study.get_survey_ids_and_object_ids_for_study('image_survey')
     participants = study.participants.all()
+
+    data_types_dict = OrderedDict(sorted(data_types_dict.items(), key=lambda t: t[0]))
+
+    aliases = ParticipantAliases.objects.filter(study_id=study_id)
 
     return render_template(
         'view_study.html',
         study=study,
         patients=participants,
+        aliases=aliases,
+        data_types=data_types_dict,
         audio_survey_ids=audio_survey_ids,
         image_survey_ids=image_survey_ids,
         tracking_survey_ids=tracking_survey_ids,
+        allowed_studies=get_admins_allowed_studies(),
+        system_admin=admin_is_system_admin()
+    )
+
+@admin_pages.route('/view_statistics/<string:study_id>', methods=['GET'])
+@authenticate_admin_study_access
+def view_statistics(study_id=None):
+
+    settings_strings = { 'accelerometer': 'Accelerometer', 'bluetooth': 'Bluetooth', 'calls': 'Calls', 'gps': 'GPS', 
+        'identifiers': 'Identifiers', 'app_log': 'Android Log', 'ios_log': 'IOS Log', 'power_state': 'Power State', 
+        'survey_answers': 'Survey Answers', 'survey_timings': 'Survey Timings', 'texts': 'Texts', 
+        'audio_recordings': 'Audio Recordings', 'image_survey': 'Image Survey', 'wifi': 'Wifi', 'proximity': 'Proximity', 
+        'gyro': 'Gyro', 'magnetometer': 'Magnetometer', 'devicemotion': 'Device Motion', 'reachability': 'Reachability' }
+
+    study = Study.objects.get(pk=study_id)
+    settings = study.get_study_device_settings().as_native_python()
+
+    data_types_dict = {}
+    for setting_key, setting_label in settings_strings.items():
+        if setting_key in settings and settings[setting_key] is True:
+            data_types_dict[setting_key] = setting_label
+
+    tracking_survey_ids = study.get_survey_ids_and_object_ids_for_study('tracking_survey')
+    if len(tracking_survey_ids) > 0:
+        data_types_dict['survey_answers'] = settings_strings['survey_answers']
+        data_types_dict['survey_timings'] = settings_strings['survey_timings']
+
+    audio_survey_ids = study.get_survey_ids_and_object_ids_for_study('audio_survey')
+    if len(audio_survey_ids) > 0:
+        data_types_dict['audio_recordings'] = settings_strings['audio_recordings']
+
+    image_survey_ids = study.get_survey_ids_and_object_ids_for_study('image_survey')
+    participants = study.participants.exclude(os_type__exact='')
+
+    data_types_dict = OrderedDict(sorted(data_types_dict.items(), key=lambda t: t[0]))
+
+    datetime_now = datetime.now()
+    date_format = "%Y-%m-%d %H:%M:%S"
+
+    received_data_stats_dict = {}
+    received_data_stats_totals_dict = {}
+    for stat in ReceivedDataStats.objects.filter(participant__in=participants):
+
+        if stat.data_type not in received_data_stats_totals_dict:
+            received_data_stats_totals_dict[stat.data_type] = {'number_of_uploads':0, 'number_bytes_uploaded':0}
+
+        received_data_stats_totals_dict[stat.data_type]['number_of_uploads'] += stat.number_of_uploads
+        received_data_stats_totals_dict[stat.data_type]['number_bytes_uploaded'] += stat.number_bytes_uploaded
+
+        date_diff = (datetime_now - stat.last_upload_timestamp).total_seconds() / 3600.0
+        date_diff_days = int(numpy.floor(date_diff / 24.0))
+        date_string = stat.last_upload_timestamp.replace(tzinfo=pytz.utc).astimezone(pytz.timezone('America/Chicago')).strftime(date_format)
+
+        if stat.participant.patient_id not in received_data_stats_dict:
+            received_data_stats_dict[stat.participant.patient_id] = { 'days_since_last_contact': date_diff_days }
+        elif date_diff_days < received_data_stats_dict[stat.participant.patient_id]['days_since_last_contact']:
+            received_data_stats_dict[stat.participant.patient_id]['days_since_last_contact'] = date_diff_days
+
+        if stat.number_bytes_uploaded / 1024.0 < 1.0:
+            download_size_string = '{:d} B'.format(stat.number_bytes_uploaded)
+        elif stat.number_bytes_uploaded / 1024.0 ** 2 < 1.0:
+            download_size_string = '{:0.1f} KB'.format(stat.number_bytes_uploaded / 1024.0)
+        elif stat.number_bytes_uploaded / 1024.0 ** 3 < 1.0:
+            download_size_string = '{:0.1f} MB'.format(stat.number_bytes_uploaded / (1024.0 ** 2))
+        else:
+            download_size_string = '{:0.1f} GB'.format(stat.number_bytes_uploaded / (1024.0 ** 3))
+
+        stats_string = '{0} | {1} | {2}'.format(stat.number_of_uploads, download_size_string, date_string)
+
+        if date_diff < 6.0:
+            date_color = 'btn-success'
+        if date_diff >= 6.0:
+            date_color = 'btn-warning'
+        if date_diff >= 12.0:
+            date_color = 'btn-danger'
+
+        received_data_stats_dict[stat.participant.patient_id][stat.data_type] = \
+            {
+              'stats_string': stats_string,
+              'stats_color': date_color,
+            }
+
+    for data_type in received_data_stats_totals_dict.keys():
+
+        if received_data_stats_totals_dict[data_type]['number_bytes_uploaded'] / 1024.0 < 1.0:
+            received_data_stats_totals_dict[data_type]['size_string'] = '{:d} B'.format(received_data_stats_totals_dict[data_type]['number_bytes_uploaded'])
+        elif received_data_stats_totals_dict[data_type]['number_bytes_uploaded'] / 1024.0 ** 2 < 1.0:
+            received_data_stats_totals_dict[data_type]['size_string'] = '{:0.1f} KB'.format(received_data_stats_totals_dict[data_type]['number_bytes_uploaded'] / 1024.0)
+        elif received_data_stats_totals_dict[data_type]['number_bytes_uploaded'] / 1024.0 ** 3 < 1.0:
+            received_data_stats_totals_dict[data_type]['size_string'] = '{:0.1f} MB'.format(received_data_stats_totals_dict[data_type]['number_bytes_uploaded'] / (1024.0 ** 2))
+        else:
+            received_data_stats_totals_dict[data_type]['size_string'] = '{:0.1f} GB'.format(received_data_stats_totals_dict[data_type]['number_bytes_uploaded'] / (1024.0 ** 3))
+
+    return render_template(
+        'view_statistics.html',
+        study=study,
+        patients=participants,
+        data_types=data_types_dict,
+        received_data_stats=received_data_stats_dict,
+        received_data_stats_totals=received_data_stats_totals_dict,
         allowed_studies=get_admins_allowed_studies(),
         system_admin=admin_is_system_admin()
     )
@@ -61,10 +238,14 @@ def view_study(study_id=None):
 @authenticate_admin_study_access
 def view_study_data_pipeline(study_id=None):
     study = Study.objects.get(pk=study_id)
+    pipelines = study.study_pipelines.all()
+    study_participants = [str(user.patient_id) for user in study.participants.exclude(os_type__exact='')]
 
     return render_template(
         'data-pipeline.html',
         study=study,
+        pipelines=pipelines,
+        study_participants=study_participants,
         allowed_studies=get_admins_allowed_studies(),
     )
 
