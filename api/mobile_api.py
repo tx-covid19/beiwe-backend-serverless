@@ -8,16 +8,20 @@ from werkzeug.exceptions import BadRequestKeyError
 
 from config.constants import ALLOWED_EXTENSIONS, DEVICE_IDENTIFIERS_HEADER
 from database.data_access_models import FileToProcess
-from database.profiling_models import UploadTracking, DecryptionKeyError
+from database.profiling_models import UploadTracking, DecryptionKeyError, ReceivedDataStats
 from database.user_models import Participant
 from libs.android_error_reporting import send_android_error_report
 from libs.encryption import decrypt_device_file, HandledError, DecryptionKeyInvalidError
 from libs.http_utils import determine_os_api
-from libs.logging import log_error
-from libs.s3 import s3_upload, get_client_public_key_string, get_client_private_key
+from libs.bw_logging import log_error
+from libs.s3 import s3_upload
+from libs.client_key_management import get_client_public_key_string, get_client_private_key
 from libs.sentry import make_sentry_client
 from libs.user_authentication import (authenticate_user, authenticate_user_registration,
     authenticate_user_ignore_password)
+from libs.s3 import construct_s3_raw_data_path
+
+from database.study_models import ParticipantSurvey
 
 ################################################################################
 ############################# GLOBALS... #######################################
@@ -75,6 +79,14 @@ def upload(OS_API=""):
     patient_id = request.values['patient_id']
     user = Participant.objects.get(patient_id=patient_id)
 
+    # first we check to make sure that the participant is currently registered, if not we reject the upload and
+    # tell the mobile app to delete it so it will not be resent
+    if user.device_id == '': 
+        error_message ="an upload has failed " + patient_id
+        error_message += ". Participant is not registered, returning 200 OK so device deletes bad file."
+        log_error(Exception("upload error"), error_message)
+        return render_template('blank.html'), 200
+
     # Slightly different values for iOS vs Android behavior.
     # Android sends the file data as standard form post parameter (request.values)
     # iOS sends the file as a multipart upload (so ends up in request.files)
@@ -90,15 +102,21 @@ def upload(OS_API=""):
     if isinstance(uploaded_file, FileStorage):
         uploaded_file = uploaded_file.read()
 
-    file_name = request.values['file_name']
-    # print "uploaded file name:", file_name, len(uploaded_file)
+    if 'file_name' in request.values and request.values['file_name']:
+        file_name = request.values['file_name']
+    else:
+        error_message ="an upload has failed " + patient_id
+        error_message += ". Request did not include a file_name."
+        log_error(Exception("upload error"), error_message)
+        return render_template('blank.html'), 200
+
     if "crashlog" in file_name.lower():
         send_android_error_report(patient_id, uploaded_file)
         return render_template('blank.html'), 200
 
     if file_name[:6] == "rList-":
         return render_template('blank.html'), 200
-    
+   
     client_private_key = get_client_private_key(patient_id, user.study.object_id)
     try:
         uploaded_file = decrypt_device_file(patient_id, uploaded_file, client_private_key, user)
@@ -106,7 +124,6 @@ def upload(OS_API=""):
         # when decrypting fails, regardless of why, we rely on the decryption code
         # to log it correctly and return 200 OK to get the device to delete the file.
         # We do not want emails on these types of errors, so we use log_error explicitly.
-        print("the following error was handled:")
         log_error(e, "%s; %s; %s" % (patient_id, file_name, e.message))
         return render_template('blank.html'), 200
     #This is what the decryption failure mode SHOULD be, but we are still identifying the decryption bug
@@ -121,16 +138,22 @@ def upload(OS_API=""):
         
         return render_template('blank.html'), 200
 
-    # print "decryption success:", file_name
     # if uploaded data a) actually exists, B) is validly named and typed...
     if uploaded_file and file_name and contains_valid_extension(file_name):
-        s3_upload(file_name.replace("_", "/"), uploaded_file, user.study.object_id)
-        FileToProcess.append_file_for_processing(file_name.replace("_", "/"), user.study.object_id, participant=user)
+        raw_data_filename = construct_s3_raw_data_path(user.study.object_id, file_name.replace("_", "/"))
+        s3_upload(raw_data_filename, uploaded_file, user.study.object_id, raw_path=True)
+        FileToProcess.append_file_for_processing(raw_data_filename, user.study.object_id, participant=user)
         UploadTracking.objects.create(
-            file_path=file_name.replace("_", "/"),
+            file_path=raw_data_filename,
             file_size=len(uploaded_file),
             timestamp=timezone.now(),
             participant=user,
+        )
+        ReceivedDataStats.update_statistics(
+            file_path = raw_data_filename,
+            file_size = len(uploaded_file),
+            timestamp = timezone.now(),
+            participant = user,
         )
         return render_template('blank.html'), 200
     else:
@@ -231,9 +254,9 @@ def register_user(OS_API=""):
                      (patient_id, mac_address, phone_number, device_id, device_os,
                       os_version, product, brand, hardware_id, manufacturer, model,
                       beiwe_version))
-    # print(file_contents + "\n")
-    s3_upload(file_name, file_contents, study_id)
-    FileToProcess.append_file_for_processing(file_name, user.study.object_id, participant=user)
+    raw_data_filename = construct_s3_raw_data_path(user.study.object_id, file_name)
+    s3_upload(raw_data_filename, file_contents, user.study.object_id, raw_path=True)
+    FileToProcess.append_file_for_processing(raw_data_filename, user.study.object_id, participant=user)
 
     # set up device.
     user.set_device(device_id)
@@ -279,6 +302,30 @@ def contains_valid_extension(file_name):
 ################################# Download #####################################
 ################################################################################
 
+def get_surveys_for_participant(participant, requesting_os):
+
+    survey_json_list = []
+    for survey in ParticipantSurvey.objects.filter(participant=participant, deleted=False):
+
+        try:
+            survey_dict = survey.as_native_python()
+        except:
+            print("Could not decode survey {0} {1}".format(survey.object_id, survey.name))
+            raise
+
+        # Make the dict look like the old Mongolia-style dict that the frontend is expecting
+        survey_dict.pop('id')
+        survey_dict.pop('deleted')
+        survey_dict.pop('name')
+        survey_dict['_id'] = survey_dict.pop('object_id')
+
+        # Exclude image surveys for the Android app to avoid crashing it
+        if requesting_os == "ANDROID" and survey.survey_type == "image_survey":
+            pass
+        else:
+            survey_json_list.append(survey_dict)
+
+    return survey_json_list
 
 @mobile_api.route('/download_surveys', methods=['GET', 'POST'])
 @mobile_api.route('/download_surveys/ios/', methods=['GET', 'POST'])
@@ -287,4 +334,8 @@ def contains_valid_extension(file_name):
 def get_latest_surveys(OS_API=""):
     participant = Participant.objects.get(patient_id=request.values['patient_id'])
     study = participant.study
-    return json.dumps(study.get_surveys_for_study(requesting_os=OS_API))
+    surveys = study.get_surveys_for_study(requesting_os=OS_API)
+    pt_surveys = get_surveys_for_participant(participant, requesting_os=OS_API)
+    if pt_surveys:
+        surveys += pt_surveys
+    return json.dumps(surveys)
