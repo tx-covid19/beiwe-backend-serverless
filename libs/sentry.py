@@ -2,7 +2,7 @@ from cronutils import ErrorSentry, ErrorHandler
 from raven import Client as SentryClient
 from raven.transport import HTTPTransport
 from raven.exceptions import InvalidDsn
-from libs.logging import log_error
+from libs.bw_logging import log_error
 from config.settings import SENTRY_ANDROID_DSN, SENTRY_DATA_PROCESSING_DSN, SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 
 
