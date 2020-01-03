@@ -16,3 +16,7 @@ RUN ["pip", "install", "--upgrade", "pip"]
 RUN ["pip", "install", "-r", "Beiwe-Analysis/Pipeline/python2-requirements.txt"]
 RUN ["pip3", "install", "--upgrade", "pip"]
 RUN ["pip3", "install", "-r", "Beiwe-Analysis/Pipeline/python3-requirements.txt"]
+
+COPY Beiwe-Analysis/Pipeline/utils/runner.sh runner.sh
+COPY Beiwe-Analysis/Pipeline/utils/download_s3_files.py download_s3_files.py
+COPY Beiwe-Analysis/Pipeline/utils/upload_s3_files.py upload_s3_files.py
