@@ -2,15 +2,18 @@ from csv import writer
 from re import sub
 
 from flask import Blueprint, flash, redirect, request, Response
-
 from libs.admin_authentication import authenticate_admin_study_access
-from libs.s3 import s3_upload, create_client_key_pair
+from libs.s3 import s3_upload, construct_s3_raw_data_path
 from libs.streaming_bytes_io import StreamingBytesIO
 from database.study_models import Study
 from database.user_models import Participant
 
 participant_administration = Blueprint('participant_administration', __name__)
 
+import logging
+logging.basicConfig()
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 @participant_administration.route('/reset_participant_password', methods=["POST"])
 @authenticate_admin_study_access
@@ -61,17 +64,28 @@ def create_new_patient():
 
     study_id = request.values['study_id']
     patient_id, password = Participant.create_with_password(study_id=study_id)
-
     # Create an empty file on S3 indicating that this user exists
     study_object_id = Study.objects.filter(pk=study_id).values_list('object_id', flat=True).get()
-    s3_upload(patient_id, "", study_object_id)
-    create_client_key_pair(patient_id, study_object_id)
+    s3_upload(construct_s3_raw_data_path(study_object_id, patient_id), "", study_object_id, raw_path=True)
 
     response_string = 'Created a new patient\npatient_id: {:s}\npassword: {:s}'.format(patient_id, password)
     flash(response_string, 'success')
 
     return redirect('/view_study/{:s}'.format(study_id))
 
+def participant_credential_generator(study_id, number_of_new_patients, desired_filename):
+    si = StreamingBytesIO()
+    filewriter = writer(si)
+    filewriter.writerow(['Patient ID', "Registration password"])
+    study_object_id = Study.objects.filter(pk=study_id).values_list('object_id', flat=True).get()
+    study_name = Study.objects.filter(pk=study_id).values_list('name', flat=True).get()
+    for _ in xrange(number_of_new_patients):
+        patient_id, password = Participant.create_with_password(study_id=study_id)
+        # Creates an empty file on s3 indicating that this user exists
+        s3_upload(construct_s3_raw_data_path(study_object_id, patient_id), "", study_object_id, raw_path=True)
+        filewriter.writerow([patient_id, password])
+        yield si.getvalue()
+	si.empty()
 
 @participant_administration.route('/create_many_patients/<string:study_id>', methods=["POST"])
 @authenticate_admin_study_access
@@ -86,21 +100,7 @@ def create_many_patients(study_id=None):
     filename = sub(r'[^a-zA-Z0-9_\.=]', '', filename_spaces_to_underscores)
     if not filename.endswith('.csv'):
         filename += ".csv"
-    return Response(csv_generator(study_id, number_of_new_patients),
+
+    return Response(participant_credential_generator(study_id, number_of_new_patients, desired_filename),
                     mimetype="csv",
                     headers={'Content-Disposition': 'attachment; filename="%s"' % filename})
-
-
-def csv_generator(study_id, number_of_new_patients):
-    si = StreamingBytesIO()
-    filewriter = writer(si)
-    filewriter.writerow(['Patient ID', "Registration password"])
-    study_object_id = Study.objects.filter(pk=study_id).values_list('object_id', flat=True).get()
-    for _ in xrange(number_of_new_patients):
-        patient_id, password = Participant.create_with_password(study_id=study_id)
-        # Creates an empty file on s3 indicating that this user exists
-        s3_upload(patient_id, "", study_object_id)
-        create_client_key_pair(patient_id, study_object_id)
-        filewriter.writerow([patient_id, password])
-        yield si.getvalue()
-        si.empty()
