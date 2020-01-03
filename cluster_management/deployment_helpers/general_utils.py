@@ -12,6 +12,12 @@ from time import sleep
 import botocore.exceptions as botoexceptions
 import coloredlogs
 from fabric.exceptions import NetworkError
+from fabric.api import env as fabric_env
+
+# Fabric configuration
+class FabricExecutionError(Exception): pass
+fabric_env.abort_exception = FabricExecutionError
+fabric_env.abort_on_prompts = True
 
 coloredlogs.install(fmt="%(levelname)s %(name)s: %(message)s")
 
@@ -46,7 +52,7 @@ def retry(func, *args, **kwargs):
     for i in range(100):
         try:
             return func(*args, **kwargs)
-        except (NetworkError, botoexceptions.ClientError, botoexceptions.WaiterError) as e:
+        except (NetworkError, botoexceptions.ClientError, botoexceptions.WaiterError, FabricExecutionError) as e:
             log.error('Encountered error of type %s with error message "%s"\nRetrying with attempt %s.'
                       % (type(e).__name__, e, i+1) )
             sleep(3)
