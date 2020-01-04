@@ -1,7 +1,7 @@
 import boto3
 import Crypto
 
-from config.constants import DEFAULT_S3_RETRIES
+from config.constants import DEFAULT_S3_RETRIES, RAW_DATA_FOLDER
 from config.settings import (BEIWE_SERVER_AWS_ACCESS_KEY_ID, BEIWE_SERVER_AWS_SECRET_ACCESS_KEY,
     S3_BUCKET, S3_REGION_NAME)
 from libs import encryption
@@ -17,7 +17,7 @@ conn = boto3.client('s3',
 
 def s3_upload(key_path: str, data_string: bytes, study_object_id: str, raw_path=False) -> None:
     if not raw_path:
-        key_path = study_object_id + "/" + key_path
+        key_path = '/'.join([RAW_DATA_FOLDER, study_object_id, key_path])
     data = encryption.encrypt_for_server(data_string, study_object_id)
     conn.put_object(Body=data, Bucket=S3_BUCKET, Key=key_path)#, ContentType='string')
 
@@ -27,7 +27,7 @@ def s3_retrieve(key_path, study_object_id, raw_path=False, number_retries=DEFAUL
     which defaults to false.  When set to false the path is prepended to place the file in the
     appropriate study_id folder. """
     if not raw_path:
-        key_path = study_object_id + "/" + key_path
+        key_path = '/'.join([RAW_DATA_FOLDER, study_object_id, key_path])
     encrypted_data = _do_retrieve(S3_BUCKET, key_path, number_retries=number_retries)['Body'].read()
     return encryption.decrypt_server(encrypted_data, study_object_id)
 
