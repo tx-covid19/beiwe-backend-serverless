@@ -18,7 +18,7 @@ _imp.load_source("__init__", _current_folder_init)
 # noinspection PyUnresolvedReferences
 from config import load_django
 from config.settings import S3_BUCKET
-from config.constants import CHUNKS_FOLDER, API_TIME_FORMAT
+from config.constants import CHUNKS_FOLDER, API_TIME_FORMAT, RAW_DATA_FOLDER
 from database.user_models import Participant
 from database.data_access_models import ChunkRegistry
 from libs.file_processing import unix_time_to_string
@@ -129,7 +129,7 @@ def assemble_deletable_files(sorted_data):
         expunge_start_date = convert_date(expunge_start_date)
         expunge_start_unix_timestamp = int((expunge_start_date - UNIX_EPOCH_START).total_seconds()) * 1000
 
-        prefix = str(participant.study.object_id) + "/" + patient_id + "/"
+        prefix = RAW_DATA_FOLDER + "/" + str(participant.study.object_id) + "/" + patient_id + "/"
         s3_files = s3_list_files(prefix, as_generator=True)
 
         chunks_prefix = CHUNKS_FOLDER + "/" + prefix
