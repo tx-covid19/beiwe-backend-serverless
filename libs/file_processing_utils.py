@@ -161,7 +161,7 @@ def create_fake_mp4(number=10):
     participant_id = Participant.objects.get(patient_id='h6fflp')
     for x in range(number):
         with open("thing", "r") as f:
-            file_path = "55d3826297013e3a1c9b8c3e/h6fflp/voiceRecording/%s.mp4" % (1000000000 + x)
+            file_path = "RAW_DATA/55d3826297013e3a1c9b8c3e/h6fflp/voiceRecording/%s.mp4" % (1000000000 + x)
             s3_upload(file_path, f.read(), "55d3826297013e3a1c9b8c3e", raw_path=True)
             FileToProcess.append_file_for_processing(file_path, "55d3826297013e3a1c9b8c3e", participant_id=participant_id)
 
