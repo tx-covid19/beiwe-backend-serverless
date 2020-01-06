@@ -15,7 +15,7 @@ def get_and_summarize(patient_id: str):
     print(f"Total Data Uploaded: {byte_sum/1024/1024}MB")
 
     counter = Counter(
-        path.split("/")[2] for path in
+        path.split("/")[3] for path in
         FileToProcess.objects.filter(participant=p).values_list("s3_file_path", flat=True)
     )
     return counter.most_common()
