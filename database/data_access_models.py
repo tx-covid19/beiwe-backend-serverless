@@ -9,7 +9,7 @@ from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
 
 from config.constants import (CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES,
-    PIPELINE_FOLDER)
+    PIPELINE_FOLDER, RAW_DATA_FOLDER)
 from database.models import AbstractModel
 from database.study_models import Study
 from database.validators import LengthValidator
@@ -162,11 +162,12 @@ class FileToProcess(AbstractModel):
     def append_file_for_processing(cls, file_path, study_object_id, **kwargs):
         # Get the study's primary key
         study_pk = Study.objects.filter(object_id=study_object_id).values_list('pk', flat=True).get()
-        
-        if file_path[:24] == study_object_id:
+       
+        raw_data_study_dir = '/'.join([RAW_DATA_FOLDER, study_object_id])
+        if file_path[:len(raw_data_study_dir)] == raw_data_study_dir:
             cls.objects.create(s3_file_path=file_path, study_id=study_pk, **kwargs)
         else:
-            cls.objects.create(s3_file_path=study_object_id + '/' + file_path, study_id=study_pk, **kwargs)
+            cls.objects.create(s3_file_path=raw_data_study_dir + '/' + file_path, study_id=study_pk, **kwargs)
 
 
 class FileProcessLock(AbstractModel):
