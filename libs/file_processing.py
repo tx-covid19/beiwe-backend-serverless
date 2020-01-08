@@ -20,7 +20,11 @@ from database.data_access_models import ChunkRegistry, FileProcessLock, FileToPr
 from database.study_models import Survey
 from database.user_models import Participant
 from libs.s3 import s3_retrieve, s3_upload
-
+import json
+import logging
+logging.basicConfig()
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 class OldBotoImportThatNeedsFixingError(Exception): pass
 class EverythingWentFine(Exception): pass
@@ -28,6 +32,224 @@ class ProcessingOverlapError(Exception): pass
 
 
 """########################## Hourly Update Tasks ###########################"""
+
+
+def process_file_chunks_lambda(count: int):
+    """
+    This is the function that is called from the command line.  It runs through all new files
+    that have been uploaded and 'chunks' them using the lambda handler. Handles logic for skipping 
+    bad files, raising errors appropriately.
+    This is primarily called manually during testing and debugging.
+    """
+    # Initialize the process and ensure there is no other process running at the same time
+    error_handler = ErrorHandler()
+    if FileProcessLock.islocked():
+        raise ProcessingOverlapError("Data processing overlapped with a previous data indexing run.")
+    FileProcessLock.lock()
+
+    try:
+        number_bad_files = 0
+        file_count = 0
+
+        # Get the list of participants with open files to process
+        participants = Participant.objects.filter(files_to_process__isnull=False).distinct()
+        print("processing files for the following users: %s" % ",".join(participants.values_list('patient_id', flat=True)))
+
+        for participant in participants:
+
+            print(f'{datetime.now()} processing {participant.patient_id},',
+                  f'{participant.files_to_process.exclude(deleted=True).count()} files remaining')
+
+            for fp in participant.files_to_process.exclude(deleted=True).all():
+                print(fp.s3_file_path)
+                event={'Records': [{
+                    's3':{
+                        'object':{
+                            'key': fp.s3_file_path
+                        }
+                    }
+                }]}
+
+
+                # Process the desired number of files and calculate the number of unprocessed files
+                retval = do_process_user_file_chunks_lambda_handler(event, [])
+
+                print(retval)
+
+                file_count += 1
+
+                if count > 0 and file_count > count:
+                    break
+
+    finally:
+        FileProcessLock.unlock()
+
+    error_handler.raise_errors()
+    raise EverythingWentFine(DATA_PROCESSING_NO_ERROR_STRING)
+
+
+def do_process_user_file_chunks_lambda_handler(event, context):
+    """
+    Chunker designed to be called by a lambda that is triggered by a new file being written to
+    the 'RAW_DATA' folder of a S3 bucket. Receives a data structure that contains the path of
+    the file to process, pull the data, put it into s3 bins. Run the file through
+    the appropriate logic path based on file type.
+
+    If a file is empty put its ftp object to the empty_files_list, we can't delete objects
+    in-place while iterating over the db.
+
+    All files except for the audio recording files are in the form of CSVs, most of those files
+    can be separated by "time bin" (separated into one-hour chunks) and concatenated and sorted
+    trivially. A few files, call log, identifier file, and wifi log, require some triage
+    beforehand.  The debug log cannot be correctly sorted by time for all elements, because it
+    was not actually expected to be used by researchers, but is apparently quite useful.
+
+    Any errors are themselves concatenated using the passed in error handler.
+    """
+
+    error_handler = ErrorHandler()
+
+    # Declare a defaultdict containing a tuple of two double ended queues (deque, pronounced "deck")
+    all_binified_data = defaultdict(lambda: (deque(), deque()))
+    ftps_to_remove = set()
+    survey_id_dict = {}
+
+    for record in event['Records']:
+        full_s3_path = record['s3']['object']['key']
+        key_values = full_s3_path.split('/')
+
+        # out of paranoia, verify once again that the file is in the RAW_DATA directory
+        if 'RAW_DATA' not in key_values[0]:
+
+            logger.error('S3 path {0} does not appear to be in RAW_DATA'.format(full_s3_path))
+            return {
+                'statusCode': 200,
+                'body': json.dumps('False positive!')
+            }
+
+        study_object_id = key_values[1]
+        participant_id = key_values[2]
+
+        try:
+            participant = Participant.objects.get(patient_id = participant_id)
+        except Participant.DoesNotExist as e:
+            logger.error('Could not find participant {0} for file to process {1}'.format(participant_id, full_s3_path))
+            return {
+                'statusCode': 200,
+                'body': json.dumps('Lambda failed!')
+            }
+
+        # another paranoia check, but lets make sure that the study_object_id is correct for this participant
+        if participant.study.object_id != study_object_id:
+            logger.error('Could not find participant {0} for file to process {1}'.format(participant_id, full_s3_path))
+            return {
+                'statusCode': 200,
+                'body': json.dumps('Lambda failed!')
+            }
+
+        # an file with no extension means we may need to create RSA keys for this participant
+        # lets investigate!
+        file_extension = full_s3_path.rsplit('.',1)[1]
+        if not file_extension:
+
+            # first check to see if a key pair already exists
+            key_paths = construct_s3_key_paths(study_object_id, participant_id)
+            logger.info('Look to see if keys already exist at: {}'.format(key_paths))
+
+            if s3_exists(key_paths['private'], study_object_id, raw_path=True) and \
+               s3_exists(key_paths['public'], study_object_id, raw_path=True):
+
+                logger.error('Key pair already exists for {0}: {1}'.format(study_object_id, participant_id))
+
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Key pair already exists for {0}: {1}'.format(study_object_id, participant_id))
+                }
+
+            else:
+                logger.info('Generating key pair for {0}: {1}'.format(study_object_id, participant_id))
+                create_client_key_pair(participant_id, study_object_id)
+
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Created key pair for {0}: {1}'.format(study_object_id, participant_id))
+                }
+
+        else:
+
+            try:
+                file_to_process = participant.files_to_process.exclude(deleted=True).get(s3_file_path=full_s3_path)
+            except FileToProcess.MultipleObjectsReturned as e:
+                # sometimes there are multiple entries on files_to_process with the same s3 path,
+                # i am not sure why this happens, but i think that it could be OK just to
+                # take the first and delete the others
+                the_first_file = True
+                for fp in participant.files_to_process.exclude(deleted=True).filter(s3_file_path=full_s3_path):
+                    if the_first_file == True:
+                        file_to_process = fp
+                        the_first_file = False
+                    else:
+                        ftps_to_remove.add(fp.id)
+            except FileToProcess.DoesNotExist as e:
+                logger.error('Could not find file to process {0} for participant {1}'.format(full_s3_path, participant_id))
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps('Lambda failed!')
+                }
+
+            print('found file_to_process: ' + str(file_to_process.as_dict()))
+
+            data = batch_retrieve_for_processing(file_to_process)
+
+            # If we encountered any errors in retrieving the files for processing, they have been
+            # lumped together into data['exception']. Raise them here to the error handler and
+            # move to the next file.
+            if data['exception']:
+                logger.error("\n" + data['ftp']['s3_file_path'])
+                logger.error(data['traceback'])
+                ################################################################
+                # YOU ARE SEEING THIS EXCEPTION WITHOUT A STACK TRACE
+                # BECAUSE IT OCCURRED INSIDE POOL.MAP, ON ANOTHER THREAD
+                ################################################################
+                raise data['exception']
+
+            if data['chunkable']:
+                newly_binified_data, survey_id_hash = process_csv_data(data)
+                if data['data_type'] in SURVEY_DATA_FILES:
+                    survey_id_dict[survey_id_hash] = resolve_survey_id_from_file_name(data['ftp']["s3_file_path"])
+
+                if newly_binified_data:
+                    append_binified_csvs(all_binified_data, newly_binified_data, data['ftp'])
+                else:  # delete empty files from FilesToProcess
+                    ftps_to_remove.add(data['ftp']['id'])
+                continue
+
+            # if not data['chunkable']
+            else:
+                timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
+                # Since we aren't binning the data by hour, just create a ChunkRegistry that
+                # points to the already existing S3 file.
+                ChunkRegistry.register_unchunked_data(
+                    data['data_type'],
+                    timestamp,
+                    data['ftp']['s3_file_path'],
+                    data['ftp']['study'].pk,
+                    data['ftp']['participant'].pk,
+                    data['file_contents'],
+                )
+                ftps_to_remove.add(data['ftp']['id'])
+
+    more_ftps_to_remove, number_bad_files = upload_binified_data(all_binified_data, error_handler, survey_id_dict)
+    ftps_to_remove.update(more_ftps_to_remove)
+    # Actually delete the processed FTPs from the database
+    FileToProcess.objects.filter(pk__in=ftps_to_remove).delete()
+    # Garbage collect to free up memory
+    gc.collect()
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Lambda finished!')
+    }
 
 
 def process_file_chunks():
