@@ -84,7 +84,13 @@ class ChunkRegistry(AbstractModel):
         # Django's behavior (at least on this project, but this project is set to the New York
         # timezone so it should be generalizable) is to add UTC as a timezone when storing a naive
         # datetime in the database.
-        
+       
+        # Changing file_size from size in bytes, to size in lines or number of observations, which should be 
+        # easier to interpret,  make sure that there are no extraneous newline characters at the
+        # end of the line. this calculation will result in the number of lines in the file being undercounted
+        # by one, which will, in effect, exclude the header line from count
+        chunk_file_number_of_observations = file_contents.rstrip('\n').count('\n')
+
         cls.objects.create(
             is_chunkable=True,
             chunk_path=chunk_path,
@@ -94,7 +100,7 @@ class ChunkRegistry(AbstractModel):
             study_id=study_id,
             participant_id=participant_id,
             survey_id=survey_id,
-            file_size=len(file_contents),
+            file_size=chunk_file_number_of_observations,
         )
     
     @classmethod
@@ -105,7 +111,9 @@ class ChunkRegistry(AbstractModel):
         
         if data_type in CHUNKABLE_FILES:
             raise ChunkableDataTypeError
-        
+       
+        # unchunkable data may be binary, so leave the file_size calcuation in bytes
+
         cls.objects.create(
             is_chunkable=False,
             chunk_path=chunk_path,
