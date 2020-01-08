@@ -45,8 +45,8 @@ if __name__ == "__main__":
     parser.add_argument('--run_serially', help='process the files in serial, default is to process in parallel using a threadpool',
         action='store_true', default=False)
 
-    parser.add_argument('--num_to_process', help='Only process the first N chunks, defaults to 5, set to 0 to do all',
-        type=int, default=5)
+    parser.add_argument('--num_to_process', help='Only process the first N chunks, set to 0 to do all (default)',
+        type=int, default=0)
 
     args = parser.parse_args()
 
