@@ -15,7 +15,7 @@ from database.study_models import Study
 from database.validators import LengthValidator
 from libs.s3 import s3_retrieve
 from libs.security import chunk_hash
-
+import codecs
 
 class FileProcessingLockedError(Exception): pass
 class UnchunkableDataTypeError(Exception): pass
@@ -89,7 +89,8 @@ class ChunkRegistry(AbstractModel):
         # easier to interpret,  make sure that there are no extraneous newline characters at the
         # end of the line. this calculation will result in the number of lines in the file being undercounted
         # by one, which will, in effect, exclude the header line from count
-        chunk_file_number_of_observations = file_contents.rstrip('\n').count('\n')
+
+        chunk_file_number_of_observations = str(codecs.decode(file_contents, "zip")).rstrip('\n').count('\n')
 
         cls.objects.create(
             is_chunkable=True,
