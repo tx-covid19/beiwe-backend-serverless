@@ -91,7 +91,7 @@ def create_many_patients(study_id=None):
 
     if IS_SERVERLESS is True and number_of_new_patients > 500:
         response_string = 'Can not create more than 500 patients at a time, please break into smaller chunks.'
-        flash(response_string, 'error')
+        flash(response_string, 'danger')
         return redirect('/view_study/{:s}'.format(study_id))
         
     desired_filename = request.form.get('desired_filename', '')
