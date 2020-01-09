@@ -5,7 +5,7 @@ from config.constants import DEFAULT_S3_RETRIES, RAW_DATA_FOLDER
 from config.settings import (BEIWE_SERVER_AWS_ACCESS_KEY_ID, BEIWE_SERVER_AWS_SECRET_ACCESS_KEY,
     S3_BUCKET, S3_REGION_NAME)
 from libs import encryption
-
+from botocore.exceptions import ClientError
 
 class S3VersionException(Exception): pass
 
@@ -14,6 +14,19 @@ conn = boto3.client('s3',
                     aws_secret_access_key=BEIWE_SERVER_AWS_SECRET_ACCESS_KEY,
                     region_name=S3_REGION_NAME)
 
+
+def s3_exists(key_path: str, study_object_id: str, raw_path=False) -> bool:
+    """ Takes an S3 file path (key_path), and a study ID.  Takes an optional argument, raw_path,
+    which defaults to false.  When set to false the path is prepended to place the file in the
+    appropriate study_id folder. The function then checks to see if the key_path exists, and
+    returning True if it does, and False otherwise"""
+    if not raw_path:
+        key_path = '/'.join([RAW_DATA_FOLDER, study_object_id, key_path])
+    try:
+        conn.head_object(Bucket=S3_BUCKET, Key=key_path)
+    except ClientError:
+        return False
+    return True
 
 def s3_upload(key_path: str, data_string: bytes, study_object_id: str, raw_path=False) -> None:
     if not raw_path:
@@ -111,6 +124,11 @@ def s3_delete(key_path):
 ################################################################################
 ######################### Client Key Management ################################
 ################################################################################
+
+def check_for_client_key_pair(patient_id, study_id):
+    """Generate key pairing, push to database, return sanitized key for client."""
+    return s3_exists("keys/" + patient_id + "_private", study_id) and \
+        s3_exists("keys/" + patient_id + "_public", study_id)
 
 def create_client_key_pair(patient_id, study_id):
     """Generate key pairing, push to database, return sanitized key for client."""
