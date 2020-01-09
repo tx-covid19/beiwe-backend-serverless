@@ -2,10 +2,10 @@ from config.constants import VOICE_RECORDING
 import config.load_django
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 
-from libs.file_processing import process_file_chunks_lambda
+from libs.file_processing import process_file_chunks_lambda, do_process_user_file_chunks_lambda_handler
 import argparse
 import config.remote_db_env
-from libs.s3 import s3_retrieve
+from libs.s3 import s3_retrieve, check_for_client_key_pair
 from multiprocessing.pool import ThreadPool
 
 def check_and_update_number_of_observations(chunk):
@@ -48,7 +48,35 @@ if __name__ == "__main__":
     parser.add_argument('--num_to_process', help='Only process the first N chunks, set to 0 to do all (default)',
         type=int, default=0)
 
+    parser.add_argument('--check_creds', help='Chunk all of the data in the FilesToProcess table.',
+            action='store', nargs=2, type=str, metavar=('patient_id', 'study_object_id'))
+
+    parser.add_argument('--chunk_path', help='Chunk a file at a specified path, as opposed to going through all files in the FTP table.',
+            action='store', type=str, metavar=('s3_path'))
+
     args = parser.parse_args()
+
+    if args.chunk_path:
+        print(f'processing path {args.chunk_path}')
+        event={'Records': [{
+                    's3':{
+                        'object':{
+                            'key': args.chunk_path,
+                        }
+                    }
+                }]}
+
+
+        # Process the desired number of files and calculate the number of unprocessed files
+        retval = do_process_user_file_chunks_lambda_handler(event, [])
+        print(retval)
+
+        
+    if args.check_creds:
+        if check_for_client_key_pair(args.check_creds[0], args.check_creds[1]):
+            print(f'A key pair for {args.check_creds[1]}::{args.check_creds[0]} exists')
+        else:
+            print(f'A key pair for {args.check_creds[1]}::{args.check_creds[0]} does not exist')
 
     if args.process_ftps:
         process_file_chunks_lambda(args.num_to_process)
