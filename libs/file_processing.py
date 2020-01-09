@@ -154,9 +154,6 @@ def do_process_user_file_chunks_lambda_handler(event, context):
         if not file_extension:
 
             # first check to see if a key pair already exists
-            key_paths = check_for_client_key_pair(study_object_id, participant_id)
-            logger.info('Look to see if keys already exist at: {}'.format(key_paths))
-
             if check_for_client_key_pair(participant_id, study_object_id) is True:
 
                 logger.error('Key pair already exists for {0}: {1}'.format(study_object_id, participant_id))
