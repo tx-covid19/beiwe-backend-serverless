@@ -35,6 +35,21 @@ def s3_upload(key_path: str, data_string: bytes, study_object_id: str, raw_path=
     conn.put_object(Body=data, Bucket=S3_BUCKET, Key=key_path)#, ContentType='string')
 
 
+def s3_move(source_key_path, destination_key_path):
+    """
+    move a s3 object from source_key_path to destination_key_path, unlike other
+    functions in this library, it doesn't automatically add anything to the paths."""
+
+    try:
+        conn.copy_object(CopySource={'Bucket': S3_BUCKET, 'Key': source_key_path},
+                         Bucket=S3_BUCKET, Key=destination_key_path)
+    except:
+        print('Could not copy key {0} {1}'.format(S3_BUCKET, source_key_path))
+        raise
+
+    conn.delete_object(Bucket=S3_BUCKET, Key=source_key_path)
+
+
 def s3_retrieve(key_path, study_object_id, raw_path=False, number_retries=DEFAULT_S3_RETRIES) -> bytes:
     """ Takes an S3 file path (key_path), and a study ID.  Takes an optional argument, raw_path,
     which defaults to false.  When set to false the path is prepended to place the file in the
@@ -127,29 +142,30 @@ def s3_delete(key_path):
 
 def check_for_client_key_pair(patient_id, study_id):
     """Generate key pairing, push to database, return sanitized key for client."""
-    return s3_exists("keys/" + patient_id + "_private", study_id) and \
-        s3_exists("keys/" + patient_id + "_public", study_id)
+    return s3_exists('/'.join([KEY_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True) and \
+        s3_exists('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
+
 
 def create_client_key_pair(patient_id, study_id):
     """Generate key pairing, push to database, return sanitized key for client."""
     public, private = encryption.generate_key_pairing()
-    s3_upload("keys/" + patient_id + "_private", private, study_id)
-    s3_upload("keys/" + patient_id + "_public", public, study_id)
+    s3_upload('/'.join([KEY_FOLDER, study_id, patient_id + "_private"]), private, study_id, raw_path=True)
+    s3_upload('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), public, study_id, raw_path=True)
 
 
 def get_client_public_key_string(patient_id, study_id) -> str:
     """Grabs a user's public key string from s3."""
-    key_string = s3_retrieve("keys/" + patient_id + "_public", study_id)
+    key_string = s3_retrieve('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
     return encryption.prepare_X509_key_for_java(key_string).decode()
 
 
 def get_client_public_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
     """Grabs a user's public key file from s3."""
-    key = s3_retrieve("keys/" + patient_id +"_public", study_id)
+    key = s3_retrieve('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
     return encryption.get_RSA_cipher(key)
 
 
 def get_client_private_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
     """Grabs a user's private key file from s3."""
-    key = s3_retrieve("keys/" + patient_id +"_private", study_id)
+    key = s3_retrieve('/'.join([KEY_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True)
     return encryption.get_RSA_cipher(key)
