@@ -1,7 +1,7 @@
 import boto3
 import Crypto
 
-from config.constants import DEFAULT_S3_RETRIES, RAW_DATA_FOLDER
+from config.constants import DEFAULT_S3_RETRIES, RAW_DATA_FOLDER, KEYS_FOLDER
 from config.settings import (BEIWE_SERVER_AWS_ACCESS_KEY_ID, BEIWE_SERVER_AWS_SECRET_ACCESS_KEY,
     S3_BUCKET, S3_REGION_NAME)
 from libs import encryption
@@ -142,30 +142,30 @@ def s3_delete(key_path):
 
 def check_for_client_key_pair(patient_id, study_id):
     """Generate key pairing, push to database, return sanitized key for client."""
-    return s3_exists('/'.join([KEY_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True) and \
-        s3_exists('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
+    return s3_exists('/'.join([KEYS_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True) and \
+        s3_exists('/'.join([KEYS_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
 
 
 def create_client_key_pair(patient_id, study_id):
     """Generate key pairing, push to database, return sanitized key for client."""
     public, private = encryption.generate_key_pairing()
-    s3_upload('/'.join([KEY_FOLDER, study_id, patient_id + "_private"]), private, study_id, raw_path=True)
-    s3_upload('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), public, study_id, raw_path=True)
+    s3_upload('/'.join([KEYS_FOLDER, study_id, patient_id + "_private"]), private, study_id, raw_path=True)
+    s3_upload('/'.join([KEYS_FOLDER, study_id, patient_id + "_public"]), public, study_id, raw_path=True)
 
 
 def get_client_public_key_string(patient_id, study_id) -> str:
     """Grabs a user's public key string from s3."""
-    key_string = s3_retrieve('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
+    key_string = s3_retrieve('/'.join([KEYS_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
     return encryption.prepare_X509_key_for_java(key_string).decode()
 
 
 def get_client_public_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
     """Grabs a user's public key file from s3."""
-    key = s3_retrieve('/'.join([KEY_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
+    key = s3_retrieve('/'.join([KEYS_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
     return encryption.get_RSA_cipher(key)
 
 
 def get_client_private_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
     """Grabs a user's private key file from s3."""
-    key = s3_retrieve('/'.join([KEY_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True)
+    key = s3_retrieve('/'.join([KEYS_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True)
     return encryption.get_RSA_cipher(key)
