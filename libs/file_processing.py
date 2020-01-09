@@ -1,3 +1,4 @@
+import os
 import codecs
 import gc
 import sys
@@ -19,7 +20,7 @@ from config.constants import (ACCELEROMETER, ANDROID_LOG_FILE, API_TIME_FORMAT, 
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 from database.study_models import Survey
 from database.user_models import Participant
-from libs.s3 import s3_retrieve, s3_upload
+from libs.s3 import s3_retrieve, s3_upload, check_for_client_key_pair, create_client_key_pair
 import json
 import logging
 logging.basicConfig()
@@ -149,15 +150,14 @@ def do_process_user_file_chunks_lambda_handler(event, context):
 
         # an file with no extension means we may need to create RSA keys for this participant
         # lets investigate!
-        file_extension = full_s3_path.rsplit('.',1)[1]
+        _, file_extension = os.path.splitext(full_s3_path)
         if not file_extension:
 
             # first check to see if a key pair already exists
-            key_paths = construct_s3_key_paths(study_object_id, participant_id)
+            key_paths = check_for_client_key_pair(study_object_id, participant_id)
             logger.info('Look to see if keys already exist at: {}'.format(key_paths))
 
-            if s3_exists(key_paths['private'], study_object_id, raw_path=True) and \
-               s3_exists(key_paths['public'], study_object_id, raw_path=True):
+            if check_for_client_key_pair(participant_id, study_object_id) is True:
 
                 logger.error('Key pair already exists for {0}: {1}'.format(study_object_id, participant_id))
 
