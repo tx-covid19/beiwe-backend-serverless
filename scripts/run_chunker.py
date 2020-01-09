@@ -1,7 +1,7 @@
 from config.constants import VOICE_RECORDING
 import config.load_django
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
-
+import os
 from libs.file_processing import process_file_chunks_lambda, do_process_user_file_chunks_lambda_handler
 import argparse
 import config.remote_db_env
@@ -54,7 +54,21 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_path', help='Chunk a file at a specified path, as opposed to going through all files in the FTP table.',
             action='store', type=str, metavar=('s3_path'))
 
+    parser.add_argument('--download_chunk', help='Download file from a specified path.',
+            action='store', type=str, metavar=('s3_path'))
+
     args = parser.parse_args()
+
+
+    if args.download_chunk:
+        outfile_name = os.path.basename(args.download_chunk)
+        study_id = args.download_chunk.split('/')[1]
+        print(f'downloding file at {study_id} :: {args.download_chunk} to {outfile_name}')
+        file_contents = s3_retrieve(args.download_chunk, study_id, raw_path=True)
+        print(type(file_contents))
+        print(len(file_contents))
+        with open(outfile_name, 'wb') as ofd:
+            ofd.write(file_contents)
 
     if args.chunk_path:
         print(f'processing path {args.chunk_path}')
