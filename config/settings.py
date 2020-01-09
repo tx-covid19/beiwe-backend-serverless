@@ -31,6 +31,7 @@ SENTRY_JAVASCRIPT_DSN = getenv("SENTRY_JAVASCRIPT_DSN")
 
 # Production/Staging: set to "TRUE" if staging
 IS_STAGING = getenv("IS_STAGING") or "PRODUCTION"
+IS_SERVERLESS = getenv("IS_SERVERLESS") == "TRUE"
 
 # S3 region (not all regions have S3, so this value may need to be specified)
 S3_REGION_NAME = getenv("S3_REGION_NAME", "us-east-1")
