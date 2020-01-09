@@ -88,6 +88,12 @@ def create_many_patients(study_id=None):
     to be attached to, and returns a CSV file for download with a mapping of Patient IDs and
     passwords. """
     number_of_new_patients = int(request.form.get('number_of_new_patients', 0))
+
+    if IS_SERVERLESS is True and number_of_new_patients > 500:
+        response_string = 'Can not create more than 500 patients at a time, please break into smaller chunks.'
+        flash(response_string, 'error')
+        return redirect('/view_study/{:s}'.format(study_id))
+        
     desired_filename = request.form.get('desired_filename', '')
     filename_spaces_to_underscores = sub(r'[\ =]', '_', desired_filename)
     filename = sub(r'[^a-zA-Z0-9_\.=]', '', filename_spaces_to_underscores)
