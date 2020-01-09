@@ -13,6 +13,7 @@ from cronutils.error_handler import ErrorHandler
 
 # noinspection PyUnresolvedReferences
 from config import load_django
+from config.settings import IS_SERVERLESS
 from config.constants import (ACCELEROMETER, ANDROID_LOG_FILE, API_TIME_FORMAT, CALL_LOG,
     CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES, CHUNKS_FOLDER, CONCURRENT_NETWORK_OPS,
     DATA_PROCESSING_NO_ERROR_STRING, FILE_PROCESS_PAGE_SIZE, IDENTIFIERS, IOS_LOG_FILE,
@@ -477,15 +478,22 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
                 # retireable (i.e. completed) FTPs.
                 ftps_to_retire.update(ftp_deque)
 
-    pool = ThreadPool(CONCURRENT_NETWORK_OPS)
-    errors = pool.map(batch_upload, upload_these, chunksize=1)
-    for err_ret in errors:
-        if err_ret['exception']:
-            print(err_ret['traceback'])
-            raise err_ret['exception']
+    # only use thread pool if we are running in celery, not if running serverless
+    if IS_SERVERLESS is False:
+        pool = ThreadPool(CONCURRENT_NETWORK_OPS)
+        errors = pool.map(batch_upload, upload_these, chunksize=1)
+        for err_ret in errors:
+            if err_ret['exception']:
+                print(err_ret['traceback'])
+                raise err_ret['exception']
 
-    pool.close()
-    pool.terminate()
+        pool.close()
+        pool.terminate()
+
+    else:
+        for upload_tuple in upload_these:
+            batch_upload(upload_tuple)
+
     # The things in ftps to retire that are not in failed ftps.
     # len(failed_ftps) will become the number of files to skip in the next iteration.
     return ftps_to_retire.difference(failed_ftps), len(failed_ftps)
