@@ -1,5 +1,6 @@
 from config.constants import VOICE_RECORDING
 import config.load_django
+from database.user_models import Participant
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 import os
 from libs.file_processing import process_file_chunks_lambda, do_process_user_file_chunks_lambda_handler
@@ -54,6 +55,10 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_path', help='Chunk a file at a specified path, as opposed to going through all files in the FTP table.',
             action='store', type=str, metavar=('s3_path'))
 
+    parser.add_argument('--rechunk', help='If a file has already been chunkend, then it will be set to deleted in the FTP table, if this flag is used, the FTP table will be undeleted so that the data can be rechunked',
+        action='store_true', default=False)
+
+
     parser.add_argument('--download_chunk', help='Download file from a specified path.',
             action='store', type=str, metavar=('s3_path'))
 
@@ -71,7 +76,14 @@ if __name__ == "__main__":
             ofd.write(file_contents)
 
     if args.chunk_path:
+
         print(f'processing path {args.chunk_path}')
+
+        if args.rechunk:
+            file_path_items = args.chunk_path.split('/')
+            user = Participant.objects.get(patient_id=file_path_items[2])
+            FileToProcess.append_file_for_processing(args.chunk_path, user.study.object_id, participant=user)
+
         event={'Records': [{
                     's3':{
                         'object':{
