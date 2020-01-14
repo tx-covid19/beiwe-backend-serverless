@@ -405,65 +405,33 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
                 study_id, user_id, data_type, time_bin, original_header = data_bin
                 # data_rows_deque may be a generator; here it is evaluated
                 rows = list(data_rows_deque)
-                updated_header = convert_unix_to_human_readable_timestamps(original_header, rows)
-                chunk_path = construct_s3_chunk_path(study_id, user_id, data_type, time_bin)
+                ensure_sorted_by_timestamp(rows)
 
-                if ChunkRegistry.objects.filter(chunk_path=chunk_path).exists():
-                    chunk = ChunkRegistry.objects.get(chunk_path=chunk_path)
-                    try:
-                        s3_file_data = s3_retrieve(chunk_path, study_id, raw_path=True)
-                    except OldBotoImportThatNeedsFixingError as e:
-                        # The following check is correct for boto version 2.38.0
-                        if "The specified key does not exist." == e.message:
-                            # This error can only occur if the processing gets actually interrupted and
-                            # data files fail to upload after DB entries are created.
-                            # Encountered this condition 11pm feb 7 2016, cause unknown, there was
-                            # no python stacktrace.  Best guess is mongo blew up.
-                            # If this happened, delete the ChunkRegistry and push this file upload to the next cycle
-                            chunk.remove()
-                            raise ChunkFailedToExist("chunk %s does not actually point to a file, deleting DB entry, should run correctly on next index." % chunk_path)
-                        raise  # Raise original error if not 404 s3 error
+                # changed file name to be datetime string corresponding to the first row in the file, to hopefully
+                # avoid any collisions resulting from interleaved writes (i.e. two different raw files that both
+                # contain date for the same time bin)
+                updated_header, first_date_string = convert_unix_to_human_readable_timestamps(original_header, rows)
+                chunk_path = construct_s3_chunk_path(study_id, user_id, data_type, first_date_string)
 
-                    old_header, old_rows = csv_to_list(s3_file_data)
+                new_contents = construct_csv_string(updated_header, rows)
 
-                    if old_header != updated_header:
-                        # To handle the case where a file was on an hour boundary and placed in
-                        # two separate chunks we need to raise an error in order to retire this file. If this
-                        # happens AND ONE of the files DOES NOT have a header mismatch this may (
-                        # will?) cause data duplication in the chunked file whenever the file
-                        # processing occurs run.
-                        raise HeaderMismatchException('%s\nvs.\n%s\nin\n%s' %
-                                                      (old_header, updated_header, chunk_path) )
-
-                    old_rows = [_ for _ in old_rows]
-                    # This is O(1), which is why we use a deque (double-ended queue)
-                    old_rows.extend(rows)
-                    del rows
-                    ensure_sorted_by_timestamp(old_rows)
-                    new_contents = construct_csv_string(updated_header, old_rows)
-                    del old_rows
-
-                    upload_these.append((chunk, chunk_path, codecs.encode(new_contents, "zip"), study_id))
-                    del new_contents
+                if data_type in SURVEY_DATA_FILES:
+                    # We need to keep a mapping of files to survey ids, that is handled here.
+                    survey_id_hash = study_id, user_id, data_type, original_header
+                    survey_id = survey_id_dict[survey_id_hash]
                 else:
-                    ensure_sorted_by_timestamp(rows)
-                    new_contents = construct_csv_string(updated_header, rows)
-                    if data_type in SURVEY_DATA_FILES:
-                        # We need to keep a mapping of files to survey ids, that is handled here.
-                        survey_id_hash = study_id, user_id, data_type, original_header
-                        survey_id = survey_id_dict[survey_id_hash]
-                    else:
-                        survey_id = None
-                    chunk_params = {
-                        "study_id": study_id,
-                        "user_id": user_id,
-                        "data_type": data_type,
-                        "chunk_path": chunk_path,
-                        "time_bin": time_bin,
-                        "survey_id": survey_id
-                    }
+                    survey_id = None
+                    
+                chunk_params = {
+                    "study_id": study_id,
+                    "user_id": user_id,
+                    "data_type": data_type,
+                    "chunk_path": chunk_path,
+                    "time_bin": time_bin,
+                    "survey_id": survey_id
+                }
 
-                    upload_these.append((chunk_params, chunk_path, codecs.encode(new_contents, "zip"), study_id))
+                upload_these.append((chunk_params, chunk_path, codecs.encode(new_contents, "zip"), study_id))
             except Exception as e:
                 # Here we catch any exceptions that may have arisen, as well as the ones that we raised
                 # ourselves (e.g. HeaderMismatchException). Whichever FTP we were processing when the
@@ -502,9 +470,10 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
 """################################ S3 Stuff ################################"""
 
 
-def construct_s3_chunk_path(study_id, user_id, data_type, time_bin: int) -> str:
+def construct_s3_chunk_path(study_id, user_id, data_type, datetime_string: str) -> str:
     """ S3 file paths for chunks are of this form:
-        CHUNKED_DATA/study_id/user_id/data_type/time_bin.csv """
+        CHUNKED_DATA/study_id/user_id/data_type/datetime_string.csv 
+        assumes that datetime_string has been formatted prior to being used here """
 
     study_id = study_id.decode() if isinstance(study_id, bytes) else study_id
     user_id = user_id.decode() if isinstance(user_id, bytes) else user_id
@@ -515,7 +484,7 @@ def construct_s3_chunk_path(study_id, user_id, data_type, time_bin: int) -> str:
         study_id,
         user_id,
         data_type,
-        unix_time_to_string(time_bin*CHUNK_TIMESLICE_QUANTUM).decode()
+        datetime_string
     )
 
 
@@ -551,7 +520,8 @@ def ensure_sorted_by_timestamp(l: list):
 
 def convert_unix_to_human_readable_timestamps(header: bytes, rows: list) -> List[bytes]:
     """ Adds a new column to the end which is the unix time represented in
-    a human readable time format.  Returns an appropriately modified header. """
+    a human readable time format.  Returns an appropriately modified header and
+    the datetime string corresponding to the first row """
     for row in rows:
         unix_millisecond = int(row[0])
         time_string = unix_time_to_string(unix_millisecond // 1000)
@@ -560,7 +530,7 @@ def convert_unix_to_human_readable_timestamps(header: bytes, rows: list) -> List
         row.insert(1, time_string)
     header = header.split(b",")
     header.insert(1, b"UTC time")
-    return b",".join(header)
+    return b",".join(header), rows[0][1].decode()
 
 
 def binify_from_timecode(unix_ish_time_code_string: bytes) -> int:
