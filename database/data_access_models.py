@@ -90,7 +90,8 @@ class ChunkRegistry(AbstractModel):
         # end of the line. this calculation will result in the number of lines in the file being undercounted
         # by one, which will, in effect, exclude the header line from count
 
-        chunk_file_number_of_observations = str(codecs.decode(file_contents, "zip")).rstrip('\n').count('\n')
+        chunk_file_number_of_observations = codecs.decode(file_contents, "zip").decode('utf-8').rstrip('\n').count('\n')
+        print(f'number of observations: {chunk_file_number_of_observations}')
 
         cls.objects.create(
             is_chunkable=True,
