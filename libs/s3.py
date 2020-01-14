@@ -136,6 +136,28 @@ def _do_list_files_generator(page_iterator):
 def s3_delete(key_path):
     raise Exception("NO DONT DELETE")
 
+
+def delete_versions(files_to_delete):
+    print(f"Deleting many files, this could take a while... ")
+    for s3_file_path in files_to_delete:
+        file_args = s3_list_versions(s3_file_path)
+
+        print(
+            "Deleting %s version(s) of %s with the following VersionIds: %s" %
+            (len(file_args), s3_file_path, ", ".join([f['VersionId'] for f in file_args]) )
+        )
+
+        delete_args = {
+            "Bucket": S3_BUCKET,
+            "Delete": {
+                'Objects': file_args,
+                'Quiet': False,
+            },
+        }
+
+        conn.delete_objects(**delete_args)
+
+
 ################################################################################
 ######################### Client Key Management ################################
 ################################################################################
