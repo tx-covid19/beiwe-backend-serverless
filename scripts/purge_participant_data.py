@@ -20,7 +20,8 @@ from config import load_django
 from config.settings import S3_BUCKET
 from config.constants import CHUNKS_FOLDER, API_TIME_FORMAT, RAW_DATA_FOLDER
 from database.user_models import Participant
-from database.data_access_models import ChunkRegistry
+from database.data_access_models import ChunkRegistry, FileToProcess
+from database.profiling_models import UploadTracking
 from libs.file_processing import unix_time_to_string
 from libs.s3 import s3_list_files, s3_list_versions, conn as s3_conn
 
@@ -94,7 +95,7 @@ def setup():
 
     # print out info for confirmation
     for participant_name, date in sorted_data:
-        print(participant_name, "--", humanize_date(date))
+        print(participant_name, "--", humanize_date(date) if not 'all' in date else date)
 
     # force user to confirm
     if not skip_confirmation:
@@ -109,15 +110,47 @@ def setup():
 
     return sorted_data
 
+def delete_participants(sorted_data):
+    print()
+    for patient_id, date in sorted_data:
+        print("removing Participant entry for %s..." % patient_id)
+        Participant.objects.filter(patient_id=patient_id).delete()
+
+# delete chunk registries
+def delete_upload_tracking(sorted_data):
+    print()
+    for patient_id, date in sorted_data:
+        print("removing UploadTracking data for %s..." % patient_id)
+        participant = Participant.objects.filter(patient_id=patient_id)
+        if date == 'all':
+            UploadTracking.objects.filter(participant=participant).delete()
+        else:
+            date = convert_date(date)
+            UploadTracking.objects.filter(participant=participant, time_bin__gte=date).delete()
+
 # delete chunk registries
 def delete_chunk_registries(sorted_data):
     print()
     for patient_id, date in sorted_data:
         print("removing ChunkRegistry data for %s..." % patient_id)
-        date = convert_date(date)
         participant = Participant.objects.filter(patient_id=patient_id)
-        ChunkRegistry.objects.filter(participant=participant, time_bin__gte=date).delete()
+        if date == 'all':
+            ChunkRegistry.objects.filter(participant=participant).delete()
+        else:
+            date = convert_date(date)
+            ChunkRegistry.objects.filter(participant=participant, time_bin__gte=date).delete()
 
+# delete chunk registries
+def delete_files_to_process(sorted_data):
+    print()
+    for patient_id, date in sorted_data:
+        print("removing FileToProcess data for %s..." % patient_id)
+        participant = Participant.objects.filter(patient_id=patient_id)
+        if date == 'all':
+            FileToProcess.objects.filter(participant=participant).delete()
+        else:
+            date = convert_date(date)
+            FilesToProcess.objects.filter(participant=participant, time_bin__gte=date).delete()
 
 def assemble_deletable_files(sorted_data):
     deletable_file_paths = []
@@ -126,8 +159,11 @@ def assemble_deletable_files(sorted_data):
         participant = Participant.objects.get(patient_id=patient_id)
 
         # technically it is a datetime object
-        expunge_start_date = convert_date(expunge_start_date)
-        expunge_start_unix_timestamp = int((expunge_start_date - UNIX_EPOCH_START).total_seconds()) * 1000
+        if expunge_start_date == 'all':
+            expunge_start_unix_timestamp = 0
+        else:
+            expunge_start_date = convert_date(expunge_start_date)
+            expunge_start_unix_timestamp = int((expunge_start_date - UNIX_EPOCH_START).total_seconds()) * 1000
 
         prefix = RAW_DATA_FOLDER + "/" + str(participant.study.object_id) + "/" + patient_id + "/"
         s3_files = s3_list_files(prefix, as_generator=True)
@@ -200,9 +236,11 @@ def delete_versions(files_to_delete):
 
 setup_data = setup()
 delete_chunk_registries(setup_data)
+delete_upload_tracking(setup_data)
+delete_files_to_process(setup_data)
 
 print("\nAssembling the files to delete...")
 deletable_files = assemble_deletable_files(setup_data)
 
 delete_versions(deletable_files)
-
+delete_participants(setup_data)
