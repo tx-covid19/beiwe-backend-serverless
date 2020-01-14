@@ -2,15 +2,14 @@ from datetime import datetime
 from multiprocessing.pool import ThreadPool
 
 from config.constants import (
-    CONCURRENT_NETWORK_OPS, CHUNKS_FOLDER, CHUNKABLE_FILES,
+    CONCURRENT_NETWORK_OPS, CHUNKS_FOLDER, CHUNKABLE_FILES, RAW_DATA_FOLDER,
     PROCESSABLE_FILE_EXTENSIONS, data_stream_to_s3_file_name_string,
 )
 from libs.file_processing import process_file_chunks
-from libs.s3 import s3_list_files, s3_delete, s3_upload
+from libs.s3 import s3_list_files, s3_delete, s3_upload, delete_versions
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 from database.study_models import Study
 from database.user_models import Participant
-
 
 def reindex_all_files_to_process():
     """
@@ -18,7 +17,6 @@ def reindex_all_files_to_process():
     clears the ChunksRegistry DB, readds all relevant files on S3 to the
     FilesToProcess registry and then rechunks them.
     """
-    raise Exception("This code has not been tested since converting database backends")
     # Delete all preexisting FTP and ChunkRegistry objects
     FileProcessLock.lock()
     print('{!s} purging FileToProcess: {:d}'.format(datetime.now(), FileToProcess.objects.count()))
@@ -31,32 +29,33 @@ def reindex_all_files_to_process():
     # Delete all preexisting chunked data files
     CHUNKED_DATA = s3_list_files(CHUNKS_FOLDER)
     print('{!s} deleting older chunked data: {:d}'.format(datetime.now(), len(CHUNKED_DATA)))
-    pool.map(s3_delete, CHUNKED_DATA)
+    
+    delete_versions(CHUNKED_DATA)
     del CHUNKED_DATA
     
     # Get a list of all S3 files to replace in the database
     print('{!s} pulling new files to process...'.format(datetime.now()))
-    files_lists = pool.map(s3_list_files, Study.objects.values_list('object_id', flat=True))
-    
+    files_list = s3_list_files(RAW_DATA_FOLDER)
+    print(f'{files_list[0:5]}')
+
     # For each such file, create an FTP object
     print("putting new files to process...")
-    for i, l in enumerate(files_lists):
-        print('{!s} {:d} of {:d}, {:d} files'.format(datetime.now(), i + 1, Study.objects.count(), len(l)))
-        for fp in l:
-            if fp[-4:] in PROCESSABLE_FILE_EXTENSIONS:
-                patient_id = fp.split('/', 2)[1]
-                participant_pk = Participant.objects.filter(patient_id=patient_id).values_list('pk', flat=True).get()
-                FileToProcess.append_file_for_processing(fp, fp.split("/", 1)[0], participant_id=participant_pk)
+    for i, fp  in enumerate(files_list):
+        print(f'{datetime.now()} {i+1} of {len(files_list)}, {fp}')
+        if fp[-4:] in PROCESSABLE_FILE_EXTENSIONS:
+            patient_id = fp.split('/', 3)[2]
+            participant_pk = Participant.objects.filter(patient_id=patient_id).values_list('pk', flat=True).get()
+            FileToProcess.append_file_for_processing(fp, fp.split("/", 2)[1], participant_id=participant_pk)
     
     # Clean up by deleting large variables, closing the thread pool and unlocking the file process lock
-    del files_lists, l
+    del files_list
     pool.close()
     pool.terminate()
     FileProcessLock.unlock()
     
     # Rechunk the newly created FTPs
-    print("{!s} processing data.".format(datetime.now()))
-    process_file_chunks()
+    #print("{!s} processing data.".format(datetime.now()))
+    #process_file_chunks()
 
 
 def reindex_specific_data_type(data_type):
