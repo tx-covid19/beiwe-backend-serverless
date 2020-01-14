@@ -4,6 +4,7 @@ from database.user_models import Participant
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 import os
 from libs.file_processing import process_file_chunks_lambda, do_process_user_file_chunks_lambda_handler
+from libs.file_processing_utils import reindex_all_files_to_process
 import argparse
 import config.remote_db_env
 from libs.s3 import s3_retrieve, check_for_client_key_pair
@@ -37,6 +38,12 @@ if __name__ == "__main__":
 
     # run through all of the jobs waiting to be process and chunk them
 
+    parser.add_argument('--unlock', help='Unlock the fileprocessing lock.',
+        action='store_true', default=False)
+
+    parser.add_argument('--reindex', help='Delete all chunked data and entries in ChunkRegistry and FileToProcces tables. Repopulation FileToProcess with raw files from the S3 bucket.',
+        action='store_true', default=False)
+
     parser.add_argument('--process_ftps', help='Chunk all of the data in the FilesToProcess table.',
         action='store_true', default=False)
 
@@ -64,6 +71,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if args.unlock is True:
+        FileProcessLock.unlock()
+
+    if args.reindex is True:
+        reindex_all_files_to_process()
 
     if args.download_chunk:
         outfile_name = os.path.basename(args.download_chunk)
