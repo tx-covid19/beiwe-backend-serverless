@@ -197,7 +197,7 @@ class SurveyArchive(AbstractSurvey):
     study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='surveys_archive')
 
 
-class SurveyEvents:
+class SurveyEvents(AbstractModel):
     """ table to keep track of survey events, such as notified, expired, and completed """
 
     NOTIFIED = 'notified'
