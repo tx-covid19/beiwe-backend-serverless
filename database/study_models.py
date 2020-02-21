@@ -197,6 +197,42 @@ class SurveyArchive(AbstractSurvey):
     study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='surveys_archive')
 
 
+class SurveyEvents:
+    """ table to keep track of survey events, such as notified, expired, and completed """
+
+    NOTIFIED = 'notified'
+    EXPIRED = 'expired'
+    COMPLETED = 'completed'
+    SURVEY_EVENT_TYPES = (
+        (NOTIFIED, NOTIFIED),
+        (EXPIRED, EXPIRED),
+        (COMPLETED, COMPLETED),
+    )
+    
+    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='survey_events')
+    survey = models.ForeignKey('Survey', on_delete=models.PROTECT, related_name='events')
+    participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='survey_events')
+
+    timestamp = models.DateTimeField() 
+    event_type = models.CharField(max_length=16, choices=SURVEY_EVENT_TYPES,
+            help_text='What type of event is being recorded.')
+
+    @classmethod
+    def register_survey_event(cls, study_id, survey_id, partcipant_id, timestamp, event_type):
+
+        if event_type not in [NOTIFIED, EXPIRED, COMPLETED]:
+            raise ValueError(f'Error: {event_type} is not a valid event type, should be one of {[NOTIFIED, EXPIRED, COMPLETED]}')
+
+        cls.objects.create(
+            is_chunkable=True,
+            study_id=study_id,
+            survey_id=survey_id,
+            participant_id=participant_id,
+            timestamp=timestamp,
+            event_type=event_type
+        )
+
+
 class DeviceSettings(AbstractModel):
     """
     The DeviceSettings database contains the structure that defines
