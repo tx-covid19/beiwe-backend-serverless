@@ -24,6 +24,10 @@ from database.user_models import Participant
 from libs.s3 import s3_retrieve, s3_upload, check_for_client_key_pair, create_client_key_pair
 import json
 import logging
+
+from libs.logfile_processing import process_android_log_data
+from libs.survey_processing import process_survey_timings_data, resolve_survey_id_from_file_name
+
 logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -32,6 +36,10 @@ class OldBotoImportThatNeedsFixingError(Exception): pass
 class EverythingWentFine(Exception): pass
 class ProcessingOverlapError(Exception): pass
 
+file_processing_func = {
+            SURVEY_TIMINGS: process_survey_timings_data,
+            ANDROID_LOG_FILE: process_android_log_data,
+        }
 
 """########################## Hourly Update Tasks ###########################"""
 
@@ -211,6 +219,12 @@ def do_process_user_file_chunks_lambda_handler(event, context):
                 ################################################################
                 raise data['exception']
 
+            # call function to further process the data
+            if data['data_type'] in file_processing_func:
+                print(f'calling file processing func on {data["data_type"]}')
+                file_processing_func[data['data_type']](data)
+                # call API to send calculated measures to data aggregator
+
             if data['chunkable']:
                 newly_binified_data, survey_id_hash = process_csv_data(data)
                 if data['data_type'] in SURVEY_DATA_FILES:
@@ -220,7 +234,6 @@ def do_process_user_file_chunks_lambda_handler(event, context):
                     append_binified_csvs(all_binified_data, newly_binified_data, data['ftp'])
                 else:  # delete empty files from FilesToProcess
                     ftps_to_remove.add(data['ftp']['id'])
-                continue
 
             # if not data['chunkable']
             else:
@@ -538,10 +551,6 @@ def binify_from_timecode(unix_ish_time_code_string: bytes) -> int:
         integer value of the bin it should go in. """
     actually_a_timecode = clean_java_timecode(unix_ish_time_code_string)  # clean java time codes...
     return actually_a_timecode // CHUNK_TIMESLICE_QUANTUM #separate into nice, clean hourly chunks!
-
-
-def resolve_survey_id_from_file_name(name: str) -> str:
-    return name.rsplit("/", 2)[1]
 
 
 """############################## Standard CSVs #############################"""

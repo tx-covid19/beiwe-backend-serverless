@@ -4,7 +4,7 @@ import json
 from django.db import models
 from django.db.models import F, Func
 from django.utils import timezone
-
+from django.core.exceptions import ValidationError
 from config.constants import ResearcherRole
 from config.study_constants import (ABOUT_PAGE_TEXT, AUDIO_SURVEY_SETTINGS, CONSENT_FORM_TEXT,
     DEFAULT_CONSENT_SECTIONS_JSON, IMAGE_SURVEY_SETTINGS, SURVEY_SUBMIT_SUCCESS_TOAST_TEXT)
@@ -202,7 +202,8 @@ class SurveyEvents(AbstractModel):
 
     NOTIFIED = 'notified'
     EXPIRED = 'expired'
-    COMPLETED = 'completed'
+    COMPLETED = 'submitted'
+    ANDROID_COMPLETED = 'User hit submit'
     SURVEY_EVENT_TYPES = (
         (NOTIFIED, NOTIFIED),
         (EXPIRED, EXPIRED),
@@ -217,20 +218,25 @@ class SurveyEvents(AbstractModel):
     event_type = models.CharField(max_length=16, choices=SURVEY_EVENT_TYPES,
             help_text='What type of event is being recorded.')
 
-    @classmethod
-    def register_survey_event(cls, study_id, survey_id, partcipant_id, timestamp, event_type):
+    class Meta:
+        unique_together = (("study", "survey", "participant", "timestamp", "event_type"),)
 
-        if event_type not in [NOTIFIED, EXPIRED, COMPLETED]:
+    @classmethod
+    def register_survey_event(cls, study_id, survey_id, participant_id, timestamp, event_type):
+
+        if event_type not in [cls.NOTIFIED, cls.EXPIRED, cls.COMPLETED]:
             raise ValueError(f'Error: {event_type} is not a valid event type, should be one of {[NOTIFIED, EXPIRED, COMPLETED]}')
 
-        cls.objects.create(
-            is_chunkable=True,
-            study_id=study_id,
-            survey_id=survey_id,
-            participant_id=participant_id,
-            timestamp=timestamp,
-            event_type=event_type
-        )
+        try:
+            cls.objects.create(
+                study_id=study_id,
+                survey_id=survey_id,
+                participant_id=participant_id,
+                timestamp=timestamp,
+                event_type=event_type
+            )
+        except ValidationError as e:
+            print(f'ignoring duplicate row {e}')
 
 
 class DeviceSettings(AbstractModel):
