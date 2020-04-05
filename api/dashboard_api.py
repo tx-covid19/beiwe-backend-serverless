@@ -1,4 +1,5 @@
 import json
+import pytz
 from collections import OrderedDict
 from datetime import date, datetime, timedelta
 
@@ -10,8 +11,10 @@ from database.data_access_models import ChunkRegistry, PipelineRegistry
 from database.study_models import (DashboardColorSetting, DashboardGradient, DashboardInflection,
     Study)
 from database.user_models import Participant
+from database.study_models import SurveyEvents
 from libs.admin_authentication import (authenticate_researcher_study_access,
     get_researcher_allowed_studies, researcher_is_an_admin)
+from config.settings import TIMEZONE
 
 dashboard_api = Blueprint('dashboard_api', __name__)
 
@@ -24,7 +27,7 @@ DATETIME_FORMAT_ERROR = \
 def dashboard_page(study_id):
     study = get_study_or_404(study_id)
     """ information for the general dashboard view for a study"""
-    participants = list(Participant.objects.filter(study=study_id).values_list("patient_id", flat=True))
+    participants = list(Participant.objects.filter(study=study_id, device_id__isnull=False).values_list("patient_id", flat=True))
     return render_template(
         'dashboard/dashboard.html',
         study=study,
@@ -35,7 +38,6 @@ def dashboard_page(study_id):
         is_admin=researcher_is_an_admin(),
         page_location='dashboard_landing',
     )
-
 
 @dashboard_api.route("/dashboard/<string:study_id>/data_stream/<string:data_stream>", methods=["GET", "POST"])
 @authenticate_researcher_study_access
@@ -99,7 +101,7 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
 
     # -----------------------------------  general data fetching --------------------------------------------
     start, end = extract_date_args_from_request()
-    participant_objects = Participant.objects.filter(study=study_id).order_by("patient_id")
+    participant_objects = Participant.objects.filter(study=study_id, device_id__isnull=False).order_by("patient_id")
     unique_dates = []
     next_url = ""
     past_url = ""
@@ -180,7 +182,7 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
     start, end = extract_date_args_from_request()
     chunks = dashboard_chunkregistry_query(participant.id)
     patient_ids = list(Participant.objects
-                       .filter(study=study_id)
+                       .filter(study=study_id, device_id__isnull=False)
                        .exclude(patient_id=patient_id)
                        .values_list("patient_id", flat=True)
                        )
@@ -269,6 +271,99 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
         page_location='dashboard_patient',
     )
 
+
+@dashboard_api.route("/dashboard/<string:study_id>/participant_survey_status/<string:patient_id>", methods=["GET"])
+@authenticate_researcher_study_access
+def get_data_for_dashboard_participant_survey_status_display(study_id, patient_id):
+    """ parses data to be displayed for the singular participant dashboard view """
+    study = get_study_or_404(study_id)
+    participant = get_participant(patient_id, study_id)
+    start, end = extract_date_args_from_request()
+    chunks = dashboard_chunkregistry_query(participant.id)
+    patient_ids = list(Participant.objects
+                       .filter(study=study_id, device_id__isnull=False)
+                       .exclude(patient_id=patient_id)
+                       .values_list("patient_id", flat=True)
+                       )
+    patient_ids.sort()
+
+    try:
+        survey_event_array = SurveyEvents.objects.filter(participant=participant)
+    except SurveyEvents.DoesNotExist:
+        return abort(404)
+
+    survey_events_frequency_dict = {}
+    survey_events_summary_dict = {}
+    surveys_list = []
+    unique_dates = []
+    start_time_bucket = ''
+    end_time_bucket = ''
+    events = ['notified', 'submitted', 'expired']
+
+    for survey_event in survey_event_array:
+
+        surveys_list.append(survey_event.survey.object_id)
+
+        time_bucket = survey_event.timestamp.astimezone(pytz.timezone(TIMEZONE)).date()
+
+        if not start_time_bucket:
+            start_time_bucket = time_bucket
+        if not end_time_bucket:
+            end_time_bucket = time_bucket
+
+        if time_bucket < start_time_bucket:
+            start_time_bucket = time_bucket
+        if time_bucket > end_time_bucket:
+            end_time_bucket = time_bucket
+
+        if survey_event.survey.object_id not in survey_events_summary_dict:
+            survey_events_summary_dict[survey_event.survey.object_id] = {}
+
+        if time_bucket not in survey_events_summary_dict[survey_event.survey.object_id]:
+            survey_events_summary_dict[survey_event.survey.object_id][time_bucket] = {}
+            for event in events:
+                survey_events_summary_dict[survey_event.survey.object_id][time_bucket][event] = 0
+
+        survey_events_summary_dict[survey_event.survey.object_id][time_bucket][survey_event.event_type] += 1
+
+        if survey_event.survey.object_id not in survey_events_frequency_dict:
+
+            survey_events_frequency_dict[survey_event.survey.object_id] = {}
+
+            for event in events:
+                survey_events_frequency_dict[survey_event.survey.object_id][event] = 0
+
+        survey_events_frequency_dict[survey_event.survey.object_id][survey_event.event_type] += 1
+
+    if start_time_bucket and end_time_bucket:
+        next_url, past_url = create_next_past_urls(start_time_bucket, end_time_bucket, start=start, end=end)
+        unique_dates, _, _ = get_unique_dates(start, end, start_time_bucket, end_time_bucket)
+    else:
+        unique_dates=[]
+        next_url = ""
+        past_url = ""
+
+    return render_template(
+            'dashboard/participant_survey_summary.html',
+            study=study,
+            study_id=study_id,
+            patient_id=patient_id,
+            participant=participant,
+            events=events,
+            survey_events_summary_dict=survey_events_summary_dict,
+            survey_events_frequency_dict=survey_events_frequency_dict,
+            times=unique_dates,
+            first_date_data=start_time_bucket,
+            last_date_data=end_time_bucket,
+            next_url=next_url,
+            past_url=past_url,
+            patient_ids=patient_ids,
+            allowed_studies=get_researcher_allowed_studies(),
+            is_admin=researcher_is_an_admin(),
+            page_location='dashboard_patient',
+    )
+
+### Utilities
 
 def parse_processed_data(study_id, participant_objects, data_stream):
     """
