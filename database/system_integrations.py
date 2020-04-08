@@ -10,9 +10,9 @@ from database.models import JSONTextField, AbstractModel, Participant, Researche
 
 class BoxIntegration(AbstractModel):
    
-    researcher = models.ForeignKey('Researcher', on_delete=models.PROTECT, related_names='box_integration', unique=True)
+    researcher = models.OneToOneField(Researcher, on_delete=models.PROTECT, related_name='box_integration', primary_key=True)
     access_token = models.CharField(max_length=256)
-    refresh_token = models.models.CharField(max_length=256)
+    refresh_token = models.CharField(max_length=256)
     write_to_directory = models.CharField(max_length=256)
 
     def store_box_tokens(self, access_token, refresh_token):
