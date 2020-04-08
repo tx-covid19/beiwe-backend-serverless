@@ -40,3 +40,9 @@ S3_REGION_NAME = getenv("S3_REGION_NAME", "us-east-1")
 DOWNLOADABLE_APK_URL = getenv("DOWNLOADABLE_APK_URL", "https://s3.amazonaws.com/beiwe-app-backups/release/Beiwe-2.4.1-onnelaLabServer-release.apk")
 
 TIMEZONE = getenv('TIMEZONE')
+
+# connection keys for BOX integration
+BOX_clientID = getenv('BOX_clientID')
+BOX_clientSecret = getenv('BOX_clientSecret')
+BOX_enterpriseID = getenv('BOX_enterpriseID')
+BOX_registration_callback = getenv('BOX_registration_callback')
