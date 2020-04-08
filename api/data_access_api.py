@@ -2,7 +2,7 @@ from multiprocessing.pool import ThreadPool
 from zipfile import ZipFile, ZIP_STORED
 
 from datetime import datetime
-from flask import Blueprint, request, abort, json, Response
+from flask import Blueprint, request, abort, json, Response, redirect
 
 # noinspection PyUnresolvedReferences
 from config import load_django
@@ -19,12 +19,19 @@ from libs.streaming_bytes_io import StreamingBytesIO
 from database.data_access_models import PipelineUpload, InvalidUploadParameterError, \
     PipelineUploadTags
 
+from boxsdk import OAuth2, Client
+from config.settings import BOX_clientID, BOX_clientSecret, BOX_enterpriseID, BOX_registration_callback
 # Data Notes
 # The call log has the timestamp column as the 3rd column instead of the first.
 # The Wifi and Identifiers have timestamp in the file name.
 # The debug log has many lines without timestamps.
 
 data_access_api = Blueprint('data_access_api', __name__)
+
+sdk = OAuth2(
+    client_id=BOX_clientID,
+    client_secret=BOX_clientSecret
+)
 
 class DummyError(Exception): pass
 
@@ -570,6 +577,27 @@ def pipeline_data_download():
             mimetype="zip",
             headers={'Content-Disposition': 'attachment; filename="data.zip"'}
     )
+
+@data_access_api.route("/register_box", methods=["GET", "POST"])
+def register_box():
+
+    auth_url, csrf_token = sdk.get_authorization_url(BOX_registration_callback)
+    print(auth_url, csrf_token)
+
+    return redirect(auth_url)
+
+
+@data_access_api.route("/box_redirect", methods=["GET", "POST"])
+def box_code():
+
+    box_code = request.args['code']
+    oauth = sdk.authenticate(box_code)
+
+    print(oauth)
+
+    client = Client(oauth)
+
+    return(request.args)
 
 #TODO: This is a trivial rewrite of the other zip generator function for minor differences. refactor when you get to django.
 def zip_generator_for_pipeline(files_list):
