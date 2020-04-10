@@ -2,7 +2,7 @@ from multiprocessing.pool import ThreadPool
 from zipfile import ZipFile, ZIP_STORED
 
 from datetime import datetime
-from flask import Blueprint, request, abort, json, Response, redirect
+from flask import Blueprint, request, abort, json, Response, redirect, flash, Markup
 
 # noinspection PyUnresolvedReferences
 from config import load_django
@@ -206,6 +206,48 @@ def get_data():
         return Response(
                 zip_generator(get_these_files, construct_registry=True),
                 mimetype="zip",
+        )
+
+@data_access_api.route("/submit-copy-request/v1", methods=['POST', "GET"])
+def submit_copy_request():
+    """ Required: access key, access secret, study_id
+    JSON blobs: data streams, users - default to all
+    Strings: date-start, date-end - format as "YYYY-MM-DDThh:mm:ss"
+    optional: top-up = a file (registry.dat)
+    cases handled:
+        missing creds or study, invalid researcher or study, researcher does not have access
+        researcher creds are invalid
+        (Flask automatically returns a 400 response if a parameter is accessed
+        but does not exist in request.values() )
+    Returns a zip file of all data files found by the query. """
+
+    # uncomment the following line when doing a reindex
+    # return abort(503)
+
+    #study = get_and_validate_study_id(chunked_download=True)
+    #get_and_validate_researcher(study)
+
+    query = {'email_address':request.values['email_address'],
+             'box_directory':request.values['box_directory']
+    }
+
+    determine_data_streams_for_db_query(query)  # select data streams
+    determine_users_for_db_query(query)  # select users
+    determine_time_range_for_db_query(query)  # construct time ranges
+
+    print(f'submitting data copy request {query}')
+
+    # If the request is from the web form we need to indicate that it is an attachment,
+    # and don't want to create a registry file.
+    # Oddly, it is the presence of  mimetype=zip that causes the streaming response to actually stream.
+    msg = f"Copy request submitted, status emails will be sent to {request.values['email_address']}"
+    if 'web_form' in request.values:
+        flash(Markup(msg), 'success')
+        return redirect("/copy_data_to_box_form")
+    else:
+        return Response(
+                status=200,
+                response=msg
         )
 
 
@@ -577,27 +619,6 @@ def pipeline_data_download():
             mimetype="zip",
             headers={'Content-Disposition': 'attachment; filename="data.zip"'}
     )
-
-@data_access_api.route("/register_box", methods=["GET", "POST"])
-def register_box():
-
-    auth_url, csrf_token = sdk.get_authorization_url(BOX_registration_callback)
-    print(auth_url, csrf_token)
-
-    return redirect(auth_url)
-
-
-@data_access_api.route("/box_redirect", methods=["GET", "POST"])
-def box_code():
-
-    box_code = request.args['code']
-    oauth = sdk.authenticate(box_code)
-
-    print(oauth)
-
-    client = Client(oauth)
-
-    return(request.args)
 
 #TODO: This is a trivial rewrite of the other zip generator function for minor differences. refactor when you get to django.
 def zip_generator_for_pipeline(files_list):
