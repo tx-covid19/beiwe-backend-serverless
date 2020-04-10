@@ -291,6 +291,9 @@ class Researcher(AbstractPasswordUser):
             study_id=study_id,
         ).exists()
 
+    def has_box_integration(self):
+        return hasattr(self, 'box_integration') and self.box_integration is not None
+
 class StudyRelation(AbstractModel):
     """
     This is the through-model for defining the relationship between a researcher and a study.
