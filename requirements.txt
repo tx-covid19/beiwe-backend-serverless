@@ -21,3 +21,4 @@ django-extensions
 python-dateutil
 
 jinja2
+boxsdk
