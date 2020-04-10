@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Register BOX Integration{% endblock %}
+
+{% block content %}
+
+    <div class="row">
+        <h3>Register box.com Integration</h3>
+
+	<p>{{ username }}, you have not given this Beiwe system access to your box account.  Clicking below 
+	will redirect you to box.com where you will need to enable write permissions.</p>
+
+	<a href="{{ registration_url }}"><button type="button" class="btn btn-primary">Give Beiwe access to your box.com account.</button></a>
+    </div>
+
+{% endblock %}
