@@ -13,7 +13,7 @@ class BoxIntegration(AbstractModel):
     researcher = models.OneToOneField(Researcher, on_delete=models.PROTECT, related_name='box_integration', primary_key=True)
     access_token = models.CharField(max_length=256)
     refresh_token = models.CharField(max_length=256)
-    write_to_directory = models.CharField(max_length=256)
+    write_to_directory = models.CharField(max_length=256, blank=True)
 
     def store_box_tokens(self, access_token, refresh_token):
 
