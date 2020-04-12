@@ -27,27 +27,27 @@ else:
 from config import settings, constants
 provided_settings = vars(settings)
 
-# Check that all values provided actually contain something
-for attr_name, attr_value in provided_settings.items():
-    if not attr_value and attr_name[0] != '_':
-        errors.append(attr_name + " was not provided with a value.")
-
-MANDATORY_VARS = {
-    'DOMAIN_NAME',
-    'FLASK_SECRET_KEY',
-    'IS_STAGING',
-    'S3_BUCKET',
-    'SENTRY_ANDROID_DSN',
-    'SENTRY_DATA_PROCESSING_DSN',
-    'SENTRY_ELASTIC_BEANSTALK_DSN',
-    'SENTRY_JAVASCRIPT_DSN',
-    'SYSADMIN_EMAILS',
-}
-
-# Check that all the mandatory variables exist...
-for mandatory_var in MANDATORY_VARS:
-    if mandatory_var not in provided_settings:
-        errors.append(mandatory_var + " was not provided in your settings.")
+# # Check that all values provided actually contain something
+# for attr_name, attr_value in provided_settings.items():
+#     if not attr_value and attr_name[0] != '_':
+#         errors.append(attr_name + " was not provided with a value.")
+#
+# MANDATORY_VARS = {
+#     'DOMAIN_NAME',
+#     'FLASK_SECRET_KEY',
+#     'IS_STAGING',
+#     'S3_BUCKET',
+#     'SENTRY_ANDROID_DSN',
+#     'SENTRY_DATA_PROCESSING_DSN',
+#     'SENTRY_ELASTIC_BEANSTALK_DSN',
+#     'SENTRY_JAVASCRIPT_DSN',
+#     'SYSADMIN_EMAILS',
+# }
+#
+# # Check that all the mandatory variables exist...
+# for mandatory_var in MANDATORY_VARS:
+#     if mandatory_var not in provided_settings:
+#         errors.append(mandatory_var + " was not provided in your settings.")
 
 # Environment variables might be unpredictable, so we sanitize the numerical ones as ints.
 constants.DEFAULT_S3_RETRIES = int(constants.DEFAULT_S3_RETRIES)
@@ -80,17 +80,17 @@ pipeline_warning = \
 "(Due to the condition below you may need to update the access credentials in order to use " \
 "the Data Pipeline feature of Beiwe.)"
 
-if os.getenv("S3_ACCESS_CREDENTIALS_USER") and not os.getenv("BEIWE_SERVER_AWS_ACCESS_KEY_ID"):
-    print(pipeline_warning)
-    print(old_credentials_warning % ("S3_ACCESS_CREDENTIALS_USER", "BEIWE_SERVER_AWS_ACCESS_KEY_ID"))
-    
-
-if os.getenv("S3_ACCESS_CREDENTIALS_KEY") and not os.getenv("BEIWE_SERVER_AWS_SECRET_ACCESS_KEY"):
-    print(pipeline_warning)
-    print(old_credentials_warning % ("S3_ACCESS_CREDENTIALS_KEY", "BEIWE_SERVER_AWS_SECRET_ACCESS_KEY"))
-
+# if os.getenv("S3_ACCESS_CREDENTIALS_USER") and not os.getenv("BEIWE_SERVER_AWS_ACCESS_KEY_ID"):
+#     print(pipeline_warning)
+#     print(old_credentials_warning % ("S3_ACCESS_CREDENTIALS_USER", "BEIWE_SERVER_AWS_ACCESS_KEY_ID"))
 #
-# print a useful error and cease execution if any required environment variables showed up.
-if errors:
-    class BadServerConfigurationError(Exception): pass
-    raise BadServerConfigurationError("\n" + "\n".join(sorted(errors)))
+#
+# if os.getenv("S3_ACCESS_CREDENTIALS_KEY") and not os.getenv("BEIWE_SERVER_AWS_SECRET_ACCESS_KEY"):
+#     print(pipeline_warning)
+#     print(old_credentials_warning % ("S3_ACCESS_CREDENTIALS_KEY", "BEIWE_SERVER_AWS_SECRET_ACCESS_KEY"))
+
+# #
+# # print a useful error and cease execution if any required environment variables showed up.
+# if errors:
+#     class BadServerConfigurationError(Exception): pass
+#     raise BadServerConfigurationError("\n" + "\n".join(sorted(errors)))
