@@ -17,3 +17,8 @@ pytz
 ipython
 django-extensions
 python-dateutil
+
+# Other
+djangorestframework==3.11.0
+Flask-JWT-Extended==3.24.1
+requests==2.23.0
