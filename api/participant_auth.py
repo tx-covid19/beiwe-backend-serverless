@@ -28,7 +28,7 @@ def login():
     participant = participant_set.get()
 
     # encode password, as mobile clients do
-    encoded_pwd = base64.b64encode(hashlib.sha256(password.encode()).digest(), b'+_').decode()
+    encoded_pwd = base64.b64encode(hashlib.sha256(password.encode()).digest(), b'-_').decode()
     if not participant.validate_password(encoded_pwd):
         return jsonify({'msg': 'Wrong password.'}), 401
 
