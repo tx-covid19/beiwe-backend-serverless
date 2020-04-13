@@ -6,4 +6,4 @@ from ..event_models import Event
 class EventSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
-        exclude = ['id', 'date']
+        exclude = ['id', 'date', 'user']

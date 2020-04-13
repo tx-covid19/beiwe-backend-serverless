@@ -7,7 +7,7 @@ class TrackRecord(models.Model):
     user = models.ForeignKey(Participant, on_delete=models.PROTECT)
     last_update = models.DateTimeField(auto_now=True)
 
-    track_date = models.DateField(unique=True)
+    track_date = models.DateTimeField(unique=True)
     cost_category = models.CharField(max_length=100)
     cost = models.FloatField()
 

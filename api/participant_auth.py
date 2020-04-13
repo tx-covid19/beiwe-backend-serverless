@@ -4,10 +4,11 @@ import hashlib
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
     create_access_token, create_refresh_token,
-    get_jwt_identity, jwt_refresh_token_required
+    get_jwt_identity, jwt_refresh_token_required, jwt_required
 )
 
 from database.user_models import Participant
+from database.userinfo_models import ParticipantInfo
 
 participant_auth = Blueprint('participant_auth', __name__)
 
@@ -45,3 +46,27 @@ def refresh():
         'access_token': create_access_token(identity=current_patient)
     }
     return jsonify(res), 200
+
+
+@participant_auth.route('/user/settings', methods=['PUT'])
+@jwt_required
+def settings():
+    if not request.is_json:
+        return jsonify({'msg': 'Missing JSON in request'}), 400
+    current_patient = get_jwt_identity()
+    info_set = ParticipantInfo.objects.filter(user__patient_id__exact=current_patient)
+    if info_set.exists():
+        info = info_set.get()
+        fields = ['country', 'zipcode', 'timezone']
+        for field in fields:
+            if field in request.json:
+                setattr(info, field, request.json[field])
+        info.save()
+        return jsonify({'msg': 'Info updated'}), 200
+    else:
+        user = Participant.objects.get(patient_id__exact=current_patient)
+        info = ParticipantInfo(user=user, country=request.json.get('country', 'United States'),
+                               zipcode=request.json.get('zipcode', '00001'),
+                               timezone=request.json.get('timezone', 'UTC'))
+        info.save()
+        return jsonify({'msg': 'Created'}), 201
