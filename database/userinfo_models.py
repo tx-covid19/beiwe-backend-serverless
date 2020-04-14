@@ -9,3 +9,11 @@ class ParticipantInfo(models.Model):
     country = models.CharField(max_length=100)
     zipcode = models.CharField(max_length=20)
     timezone = models.CharField(max_length=100)
+
+    @classmethod
+    def get_zipcode(cls, patient_id):
+        info_set = ParticipantInfo.objects.filter(user__patient_id__exact=patient_id)
+        if info_set.exists():
+            return info_set.get().zipcode
+        else:
+            return ''

@@ -6,6 +6,7 @@ from database.info_models import CovidCase
 from database.serializers.info import CovidCaseSerializer
 from database.serializers.tracker import TrackerRecordSerializer
 from database.tracker_models import TrackRecord
+from database.userinfo_models import ParticipantInfo
 
 overview_api = Blueprint('overview_api', __name__)
 
@@ -48,9 +49,14 @@ def overview_handler():
     except Exception:
         covid_cases = {}
 
+    zipcode = ParticipantInfo.get_zipcode(patient_id)
+
     return jsonify({
         'tracker': records,
         'covid_cases': {
             **covid_cases,
+        },
+        'pollen': {
+            **get_pollen_data(zipcode)
         }
     }), 200
