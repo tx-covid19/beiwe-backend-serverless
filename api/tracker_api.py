@@ -14,10 +14,10 @@ tracker_api = Blueprint('tracker_api', __name__)
 def tracker_handler():
     patient_id = get_jwt_identity()
     if request.method == 'GET':
-        records = TrackRecord.get_with_timezone(patient_id)
+        records = TrackRecord.get_range_with_timezone(patient_id,
+                                                      request.args.get('start_date', ''),
+                                                      request.args.get('end_date', ''))
         serializer = TrackerRecordSerializer(records, many=True)
-        import sys
-        print(serializer.data, file=sys.stderr)
         return jsonify(serializer.data)
     elif request.method == 'POST':
         try:
