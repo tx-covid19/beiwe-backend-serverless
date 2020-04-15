@@ -9,6 +9,7 @@ class ParticipantInfo(models.Model):
     country = models.CharField(max_length=100)
     zipcode = models.CharField(max_length=20)
     timezone = models.CharField(max_length=100)
+    record_id = models.CharField(max_length=50)
 
     @classmethod
     def get_zipcode(cls, patient_id):
