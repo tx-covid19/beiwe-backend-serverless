@@ -1,8 +1,8 @@
-from django.contrib.postgres.fields import JSONField
 from django.db import models
 
 from libs import timezone
 from .user_models import Participant
+from .common_models import JSONTextField
 
 
 class Event(models.Model):
@@ -13,4 +13,4 @@ class Event(models.Model):
     date = models.DateTimeField(default=timezone.now)
 
     event = models.CharField(max_length=50)
-    metadata = JSONField()
+    metadata = JSONTextField()
