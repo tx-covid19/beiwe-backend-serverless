@@ -29,3 +29,4 @@ PyGithub~=1.47
 botocore~=1.15.39
 Jinja2~=2.11.1
 iso3166~=1.0.1
+PyCap~=0.0.0

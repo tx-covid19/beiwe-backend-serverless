@@ -24,12 +24,11 @@ if 'test' in sys.argv:
 elif os.environ['DJANGO_DB_ENV'] == "local":
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql_psycopg2',
-            'NAME': 'cc',
-            'USER': 'puzhao',
-            'PASSWORD': '123456',
-            'HOST': 'localhost',
-            'PORT': '',
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': TEST_DATABASE_PATH,
+            'TEST_NAME': TEST_DATABASE_PATH,
+            'TEST': {'NAME': TEST_DATABASE_PATH},
+            'CONN_MAX_AGE': None,
         }
     }
 elif os.environ['DJANGO_DB_ENV'] == "remote":
