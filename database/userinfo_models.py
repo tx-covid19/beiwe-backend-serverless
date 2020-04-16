@@ -12,9 +12,9 @@ class ParticipantInfo(models.Model):
     record_id = models.CharField(max_length=50)
 
     @classmethod
-    def get_zipcode(cls, patient_id):
+    def get_country_zipcode(cls, patient_id):
         info_set = ParticipantInfo.objects.filter(user__patient_id__exact=patient_id)
         if info_set.exists():
-            return info_set.get().zipcode
+            return info_set.get().country, info_set.get().zipcode
         else:
-            return ''
+            return None, None

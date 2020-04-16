@@ -12,13 +12,20 @@ cronutils>=0.2.1
 psycopg2==2.8.3
 
 # Keep these dependencies up to date
-boto3
-pytz
+boto3~=1.12.39
+pytz~=2019.3
 ipython
 django-extensions
-python-dateutil
+python-dateutil~=2.8.1
 
 # Other
 djangorestframework==3.11.0
 Flask-JWT-Extended==3.24.1
 requests==2.23.0
+Werkzeug~=1.0.1
+us~=1.0.0
+zipcodes~=1.1.0
+PyGithub~=1.47
+botocore~=1.15.39
+Jinja2~=2.11.1
+iso3166~=1.0.1

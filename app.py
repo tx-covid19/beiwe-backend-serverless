@@ -9,7 +9,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api,
-                 participant_administration, survey_api, participant_auth, event_api, overview_api, tracker_api)
+                 participant_administration, survey_api, participant_auth, event_api, overview_api, tracker_api,
+                 refresh_api)
 # from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
@@ -47,6 +48,7 @@ app.register_blueprint(participant_auth.participant_auth)
 app.register_blueprint(event_api.event_api)
 app.register_blueprint(overview_api.overview_api)
 app.register_blueprint(tracker_api.tracker_api)
+app.register_blueprint(refresh_api.refresh_api)
 
 
 # Don't set up Sentry for local development
