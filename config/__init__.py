@@ -21,7 +21,7 @@ if exists(EXPLICIT_REMOTE_ENV) or exists(ELASTIC_BEANSTALK_ENV):
 else:
     # if you are not running as part of a beiwe cluster (e.g. for local development)
     # we configure django to use a locale sqlite database.
-    os.environ['DJANGO_DB_ENV'] = "local"
+    os.environ['DJANGO_DB_ENV'] = os.environ.get('DJANGO_DB_ENV', 'local')
 
 
 from config import settings, constants
