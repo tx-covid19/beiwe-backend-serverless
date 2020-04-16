@@ -14,7 +14,7 @@ from github import Github
 
 
 def endpoint(country_code, zipcode):
-    API_KEY = '398251854a8f55b4c8ebe63e1ad9063b'
+    API_KEY = '398251854a8f55b4c8ebe63e1ad9063b'  # has been revoked :)
     return f'https://api.openweathermap.org/data/2.5/weather?zip={zipcode},{country_code}&appid={API_KEY}'
 
 
