@@ -15,6 +15,8 @@ class PipelineExecutionTracking(AbstractModel):
     query_start_datetime = models.CharField(max_length=256, blank=True, null=True)
     query_end_datetime = models.CharField(max_length=256, blank=True, null=True)
     participants = models.CharField(max_length=256, blank=True, null=True)
+    job_type = models.CharField(max_length=256, blank=True, null=True)
+    box_directory = models.CharField(max_length=256, blank=True, null=True)
 
     batch_job_id = models.CharField(max_length=256, blank=True, null=True)
 
@@ -26,7 +28,7 @@ class PipelineExecutionTracking(AbstractModel):
     
     @classmethod
     def pipeline_scheduled(cls, researcher_name, study_id, submission_timestamp,
-        email_address_list, query_start_datetime, query_end_datetime, participants):
+        email_address_list, query_start_datetime, query_end_datetime, participants, job_type, box_directory):
 
         researcher = Researcher.objects.get(username = researcher_name)
 
@@ -40,6 +42,8 @@ class PipelineExecutionTracking(AbstractModel):
             query_start_datetime = query_start_datetime,
             query_end_datetime = query_end_datetime,
             participants = participants,
+            job_type = job_type,
+            box_directory = box_directory,
             execution_status = 'queued')
 
         return obj.pk

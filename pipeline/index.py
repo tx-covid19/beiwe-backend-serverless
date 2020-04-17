@@ -1,4 +1,4 @@
-from config.constants import ResearcherRole
+from config.constants import ResearcherRole, ALL_JOB_TYPES
 from config.settings import DOMAIN_NAME
 from database.study_models import Study
 from database.user_models import Researcher, StudyRelation
@@ -78,7 +78,7 @@ def refresh_data_access_credentials(freq, ssm_client=None):
     )
 
 
-def create_one_job(freq, object_id, owner_id, destination_email_addresses='', data_start_datetime='', data_end_datetime='', participants='', client=None):
+def create_one_job(freq, object_id, owner_id, destination_email_addresses='', data_start_datetime='', data_end_datetime='', participants='', job_type='run_pipeline', box_directory='', client=None):
     """
     Create an AWS batch job
     The aws_object_names and client parameters are optional. They are provided in case
@@ -115,14 +115,21 @@ def create_one_job(freq, object_id, owner_id, destination_email_addresses='', da
     elif ',' in destination_email_addresses:
         destination_email_addresses = " ".join(destination_email_addresses.split(','))
 
-    print("scheduling pipeline for study {0}".format(Study.objects.get(object_id=object_id).id))
+    if job_type not in ALL_JOB_TYPES:
+        print(f"unknown job type {job_type}")
+        raise ValueError(f"unknown job type {job_type}")
+
+
+    print(f"scheduling {job_type} job for study {Study.objects.get(object_id=object_id).id}")
     pipeline_id = PipelineExecutionTracking.pipeline_scheduled(owner_id,
+                                                               job_type,
                                                                Study.objects.get(object_id=object_id).id,
                                                                datetime.datetime.now(),
                                                                destination_email_addresses,
                                                                data_start_datetime,
                                                                data_end_datetime,
-                                                               participants)
+                                                               participants,
+                                                               box_directory)
 
     response = None
     try:
@@ -149,6 +156,10 @@ def create_one_job(freq, object_id, owner_id, destination_email_addresses='', da
                         'value': freq,
                     },
                     {
+                        'name': 'job_type',
+                        'value': job_type,
+                    },
+                    {
                         'name': 'destination_email_address',
                         'value': destination_email_addresses,
                     },
@@ -163,6 +174,10 @@ def create_one_job(freq, object_id, owner_id, destination_email_addresses='', da
                     {
                         'name': 'participants',
                         'value': participants,
+                    },
+                    {
+                        'name': 'box_directory',
+                        'value': box_directory,
                     }
                 ],
             },
