@@ -207,7 +207,7 @@ class Researcher(AbstractPasswordUser):
         Create a new Researcher with provided username and no password
         """
 
-        r = cls(username=username, password='fakepassword', salt='cab', admin=False)
+        r = cls(username=username, password='fakepassword', salt='cab', site_admin=False)
         r.reset_access_credentials()
         return r
 

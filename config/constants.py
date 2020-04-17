@@ -344,4 +344,4 @@ class ResearcherRole(object):
     researcher = "study_researcher"
 
 ALL_RESEARCHER_TYPES = (ResearcherRole.study_admin, ResearcherRole.researcher)
-ALL_JOB_TYPES = {"copy_to_box", "run_pipeline")
+ALL_JOB_TYPES = ["copy_to_box", "run_pipeline"]

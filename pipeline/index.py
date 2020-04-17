@@ -19,7 +19,7 @@ def str_to_datetime(time_string):
         if "does not match format" in e.message:
             return abort(400)
 
-def refresh_data_access_credentials(freq, ssm_client=None):
+def refresh_data_access_credentials(freq, ssm_client=None, webserver=False):
     """
     Refresh the data access credentials for a particular BATCH USER user and upload them
     (encrypted) to the AWS Parameter Store. This enables AWS batch jobs to get the
@@ -40,12 +40,12 @@ def refresh_data_access_credentials(freq, ssm_client=None):
 
     # Ensure that the Researcher is attached to all Studies. This allows them to access all
     # data via the DAA.
+            #is_batch_user=True,
     for study in Study.objects.all():
         StudyRelation.objects.get_or_create(
             study=study,
             researcher=mock_researcher,
             relationship=ResearcherRole.researcher,
-            is_batch_user=True,
         )
     
     # Reset the credentials. This ensures that they aren't stale.
@@ -78,7 +78,7 @@ def refresh_data_access_credentials(freq, ssm_client=None):
     )
 
 
-def create_one_job(freq, object_id, owner_id, destination_email_addresses='', data_start_datetime='', data_end_datetime='', participants='', job_type='run_pipeline', box_directory='', client=None):
+def create_one_job(freq, object_id, owner_id, destination_email_addresses='', data_start_datetime='', data_end_datetime='', participants='', job_type='run_pipeline', box_directory='', client=None, webserver=False):
     """
     Create an AWS batch job
     The aws_object_names and client parameters are optional. They are provided in case
@@ -107,7 +107,6 @@ def create_one_job(freq, object_id, owner_id, destination_email_addresses='', da
         participants = " ".join(participants)
     elif ',' in participants:
         participants = " ".join(participants.split(','))
-    print('participants [{0}]'.format(participants))
 
     # clean up list of destination email addresses
     if isinstance(destination_email_addresses, list):
@@ -116,20 +115,19 @@ def create_one_job(freq, object_id, owner_id, destination_email_addresses='', da
         destination_email_addresses = " ".join(destination_email_addresses.split(','))
 
     if job_type not in ALL_JOB_TYPES:
-        print(f"unknown job type {job_type}")
         raise ValueError(f"unknown job type {job_type}")
 
 
     print(f"scheduling {job_type} job for study {Study.objects.get(object_id=object_id).id}")
     pipeline_id = PipelineExecutionTracking.pipeline_scheduled(owner_id,
-                                                               job_type,
                                                                Study.objects.get(object_id=object_id).id,
                                                                datetime.datetime.now(),
                                                                destination_email_addresses,
                                                                data_start_datetime,
                                                                data_end_datetime,
-                                                               participants,
-                                                               box_directory)
+                                                               participants=participants,
+                                                               job_type=job_type,
+                                                               box_directory=box_directory)
 
     response = None
     try:

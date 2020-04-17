@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 from database.models import AbstractModel
 from database.user_models import Researcher
+from database.study_models import Study
 
 class PipelineExecutionTracking(AbstractModel):
 
@@ -32,7 +33,7 @@ class PipelineExecutionTracking(AbstractModel):
 
         researcher = Researcher.objects.get(username = researcher_name)
 
-        study = researcher.studies.get(pk=study_id)
+        study = Study.objects.get(pk=study_id)
 
         obj=cls.objects.create(
             researcher = researcher,
