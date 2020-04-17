@@ -57,6 +57,28 @@ class AbstractPasswordUser(AbstractModel):
     class Meta:
         abstract = True
 
+class ParticipantAliases(AbstractModel):
+    """
+    From time to time it might become neccessary to assign a participant a new ID. This
+    can happen when the participant replaces their phone but for some reason cannot
+    log into their old Beiwe account. This shouldn't happen if they replace with the same
+    type of phone (e.g. replace iphone with iphone and android with android) but may
+    happen never-the-less. This allows the researcher to combine the data in pipelines.
+
+    reference_id is the name that the user that you would like to consolidate all aliases too.
+    alias_id is the secondary ID to points to the reference.
+    """
+
+    reference_id = models.CharField(max_length=8, unique=False, validators=[id_validator],
+                                  help_text='Eight-character unique ID with characters chosen from 1-9 and a-z')
+
+    alias_id = models.CharField(max_length=8, unique=False, validators=[id_validator],
+                                  help_text='Eight-character unique ID with characters chosen from 1-9 and a-z')
+
+    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='participant_aliases', null=False)
+
+    def __str__(self):
+        return '{} {} => {} of Study {}'.format(self.__class__.__name__, self.reference_id, self.alias_id, self.study.name)
 
 class Participant(AbstractPasswordUser):
     """

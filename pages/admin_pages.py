@@ -1,7 +1,7 @@
 from flask import abort, Blueprint, flash, Markup, redirect, render_template, request, session
 
 from database.study_models import Study, StudyField
-from database.user_models import Participant, ParticipantFieldValue, Researcher
+from database.user_models import Participant, ParticipantFieldValue, Researcher, ParticipantAliases
 from libs import admin_authentication
 from libs.admin_authentication import (authenticate_researcher_login,
     authenticate_researcher_study_access, get_researcher_allowed_studies,
@@ -31,6 +31,54 @@ def choose_study():
         is_admin=researcher_is_an_admin()
     )
 
+@admin_pages.route('/create_new_alias/<string:study_id>', methods=['GET', 'POST'])
+@authenticate_researcher_study_access
+def create_new_alias(study_id=None):
+    if request.method == 'GET':
+        return render_template(
+            'create_new_alias.html',
+            study_id=study_id,
+            allowed_studies=get_researcher_allowed_studies(),
+            is_admin=researcher_is_an_admin()
+        )
+
+    # Drop any whitespace or special characters from the username
+    reference_id = ''.join(e for e in request.form.get('reference_id', '') if e.isalnum())
+    alias_id = ''.join(e for e in request.form.get('alias_id', '') if e.isalnum())
+
+    for participant_id in [reference_id, alias_id]:
+        if not Participant.objects.filter(patient_id=participant_id).exists():
+            flash('ID {0} was not found in the Participant database, alias was not added to database'.format(participant_id), 'danger')
+            return redirect('/create_new_alias/{:d}'.format(int(study_id)))
+
+    if ParticipantAliases.objects.filter(reference_id=reference_id, alias_id=alias_id).exists():
+        flash("There is already an alias {0} => {1}".format(reference_id, alias_id), 'danger')
+        return redirect('/create_new_alias/{:d}'.format(int(study_id)))
+
+    try:
+        new_alias = ParticipantAliases(study_id=study_id, reference_id=reference_id, alias_id=alias_id)
+        new_alias.save()
+    except:
+        flash("Error, There is a problem with one or both of the entered IDs ({0}, {1}). They should be 8 character alphanumeric strings.".format(reference_id, alias_id), 'danger')
+        return redirect('/create_new_alias/{:d}'.format(int(study_id)))
+
+    return redirect('/view_study/{:d}'.format(int(study_id)))
+
+@admin_pages.route('/delete_alias', methods=["POST"])
+@authenticate_researcher_study_access
+def delete_alias():
+    """
+    Deletes an alias from the ParticipantsAlias table
+    """
+
+    alias_id = request.values['alias_id']
+    study_id = request.values['study_id']
+    try:
+        ParticipantAliases.objects.filter(id=alias_id).delete()
+    except:
+        flash('Sorry, something went wrong when trying to delete the alias.', 'danger')
+
+    return redirect('/view_study/{:s}'.format(study_id))
 
 @admin_pages.route('/view_study/<string:study_id>', methods=['GET'])
 @authenticate_researcher_study_access
@@ -45,10 +93,13 @@ def view_study(study_id=None):
     for p in participants:
         p.values_dict = {tag.field.field_name: tag.value for tag in p.field_values.all()}
 
+    aliases = ParticipantAliases.objects.filter(study_id=study_id)
+
     return render_template(
         'view_study.html',
         study=study,
         patients=participants,
+        aliases=aliases,
         audio_survey_ids=audio_survey_ids,
         image_survey_ids=image_survey_ids,
         tracking_survey_ids=tracking_survey_ids,
@@ -64,12 +115,15 @@ def view_study(study_id=None):
 @authenticate_researcher_study_access
 def view_study_data_pipeline(study_id=None):
     study = Study.objects.get(pk=study_id)
+    pipelines = study.study_pipelines.all()
+    study_participants = [str(user.patient_id) for user in study.participants.exclude(os_type__exact='')]
 
     return render_template(
         'data-pipeline.html',
         study=study,
+        pipelines=pipelines,
+        study_participants=study_participants,
         allowed_studies=get_researcher_allowed_studies(),
-        is_admin=researcher_is_an_admin(),
     )
 
 

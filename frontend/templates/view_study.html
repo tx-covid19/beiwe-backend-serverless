@@ -96,6 +96,51 @@
 
         <button type="button" class="btn btn-warning add_many_patients_button" data-toggle="modal" data-target="#addManyPatientsModal" title="Enable a number of new patients to enroll in {{ study.name }}: download a file of new Patient IDs and registration passwords">Add many new patients</button>
         {% include 'create_many_patients_modal.html' %}
+       
+        <br/><hr><br/>
+
+        <div class="row">
+          <h3>Aliases</h3>
+        </div>
+
+        <table class="display" id="alias_list">
+          <thead>
+            <tr>
+              <th>Reference ID</th>
+              <th>Alias ID</th>
+              <th>Delete Alias</th>
+            </tr>
+          </thead>
+          <tbody id="alias-table-body">
+
+            {% for alias in aliases %}
+              <tr>
+                <td>
+                  <b>{{ alias.reference_id }}</b>
+                </td>
+                <td>
+                  <b>{{ alias.alias_id }}</b>
+                </td>
+                <td>
+                  <form action="/delete_alias" method="post">
+                    <div class="form-inline">
+                      <input type="hidden" name="alias_id" value="{{ alias.id }}">
+                      <input type="hidden" name="study_id" value="{{ study.id }}">
+                      <button type="submit" class="btn btn-danger btn-sm reset_password_button">Delete</button>
+                    </div>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+
+           </tbody>
+        </table>
+
+        <form action="/create_new_alias/{{ study.id }}" method="get">
+          <div class="form-inline pull-left">
+            <button type="submit" class="btn btn-primary add_new_patient_button">Add new alias mapping</button>
+          </div>
+        </form>
 
         <br/><hr><br/>
 
@@ -106,7 +151,7 @@
             {# If there are surveys attached to this study, list them #}
             {% if tracking_survey_ids %}
               {% for ids in tracking_survey_ids %}
-                <h4><a href="/edit_survey/{{ids[0]}}" class="list-group-item">Survey ID #{{ids[1]}}</a></h4>
+                <h4><a href="/edit_survey/{{ids[0]}}" class="list-group-item">{{ids[2]}}</a></h4>
               {% endfor %}
             {# If there aren't surveys attached to this study, show a message saying "no surveys" #}
             {% else %}
@@ -115,7 +160,12 @@
           </div>
 
           {# TODO: Josh, make this pass in the study ID #}
-          <a href="/create_survey/{{ study.id }}/tracking_survey" class="btn btn-info">Create new survey</a>
+          <form action="/create_survey/{{ study.id }}/tracking_survey" method="get">
+            <div class="form-inline pull-left">
+              <button type="submit" class="btn btn-primary add_new_survey_button">Create new survey</button>
+            </div>
+          </form>
+
         </div>
 
         <div class="row">
@@ -125,7 +175,7 @@
             {# If there are surveys attached to this study, list them #}
             {% if audio_survey_ids %}
               {% for ids in audio_survey_ids %}
-                <h4><a href="/edit_survey/{{ids[0]}}" class="list-group-item">Audio Survey ID #{{ids[1]}}</a></h4>
+                <h4><a href="/edit_survey/{{ids[0]}}" class="list-group-item">{{ids[2]}}</a></h4>
               {% endfor %}
             {# If there aren't surveys attached to this study, show a message saying "no surveys" #}
             {% else %}
@@ -142,7 +192,7 @@
             {# If there are surveys attached to this study, list them #}
             {% if image_survey_ids %}
               {% for ids in image_survey_ids %}
-                <h4><a href="/edit_survey/{{ids[0]}}" class="list-group-item">Image Survey ID #{{ids[1]}}</a></h4>
+                <h4><a href="/edit_survey/{{ids[0]}}" class="list-group-item">{{ids[2]}}</a></h4>
               {% endfor %}
             {# If there aren't surveys attached to this study, show a message saying "no surveys" #}
             {% else %}
