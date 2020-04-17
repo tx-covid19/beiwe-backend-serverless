@@ -21,11 +21,12 @@ RUN ["apt", "install", "-y", "r-base"]
 WORKDIR /home
 
 # Move the directory into the corresponding directory in the container
-ADD Beiwe-Analysis Beiwe-Analysis
+# ADD Beiwe-Analysis Beiwe-Analysis
+ADD beiwe-backend beiwe-backend
 
 # Install python requirements
 RUN ["pip3", "install", "--upgrade", "pip"]
-RUN ["pip3", "install", "-r", "Beiwe-Analysis/Pipeline/python3-requirements.txt"]
+RUN ["pip3", "install", "-r", "beiwe-backend/pipeline/Beiwe-Analysis/Pipeline/python3-requirements.txt"]
 
 # Install R requirements
-RUN ["Rscript", "--vanilla", "Beiwe-Analysis/Summary/install_required_packages.R"]
+RUN ["Rscript", "--vanilla", "beiwe-backend/pipeline/Beiwe-Analysis/Summary/install_required_packages.R"]
