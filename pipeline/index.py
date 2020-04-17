@@ -2,13 +2,24 @@ from config.constants import ResearcherRole
 from config.settings import DOMAIN_NAME
 from database.study_models import Study
 from database.user_models import Researcher, StudyRelation
+from database.pipeline_models import PipelineExecutionTracking
 
 # This component of pipeline is part of the Beiwe server, the correct import is 'from pipeline.xyz...'
 from pipeline.boto_helpers import get_boto_client
 from pipeline.configuration_getters import get_eb_config, get_generic_config
 
+from config.constants import API_TIME_FORMAT
+import datetime
 
-def refresh_data_access_credentials(freq, ssm_client=None, webserver=False):
+def str_to_datetime(time_string):
+    """ Translates a time string to a datetime object, raises a 400 if the format is wrong."""
+    try:
+        return datetime.datetime.strptime(time_string, API_TIME_FORMAT)
+    except ValueError as e:
+        if "does not match format" in e.message:
+            return abort(400)
+
+def refresh_data_access_credentials(freq, ssm_client=None):
     """
     Refresh the data access credentials for a particular BATCH USER user and upload them
     (encrypted) to the AWS Parameter Store. This enables AWS batch jobs to get the
@@ -67,7 +78,7 @@ def refresh_data_access_credentials(freq, ssm_client=None, webserver=False):
     )
 
 
-def create_one_job(freq, study, patient_id, client=None, webserver=False):
+def create_one_job(freq, object_id, owner_id, destination_email_addresses='', data_start_datetime='', data_end_datetime='', participants='', client=None):
     """
     Create an AWS batch job
     The aws_object_names and client parameters are optional. They are provided in case
@@ -91,32 +102,80 @@ def create_one_job(freq, study, patient_id, client=None, webserver=False):
     if client is None:
         client = get_boto_client('batch')
 
-    client.submit_job(
-        jobName=aws_object_names['job_name'].format(freq=freq),
-        jobDefinition=aws_object_names['job_defn_name'],
-        jobQueue=aws_object_names['queue_name'],
-        containerOverrides={
-            'environment': [
-                {
-                    'name': 'study_object_id',
-                    'value': str(study.object_id),
-                }, {
-                    'name': 'study_name',
-                    'value': Study.objects.get(object_id=study.object_id).name,
-                }, {
-                    'name': 'FREQ',
-                    'value': freq,
-                }, {
-                    'name': 'patient_id',
-                    'value': patient_id,
-                },{
-                    'name': 'server_url',
-                    'value': DOMAIN_NAME,
-                }
+    # clean up list of participants
+    if isinstance(participants, list):
+        participants = " ".join(participants)
+    elif ',' in participants:
+        participants = " ".join(participants.split(','))
+    print('participants [{0}]'.format(participants))
 
-            ],
-        },
-    )
+    # clean up list of destination email addresses
+    if isinstance(destination_email_addresses, list):
+        destination_email_addresses = " ".join(destination_email_addresses)
+    elif ',' in destination_email_addresses:
+        destination_email_addresses = " ".join(destination_email_addresses.split(','))
+
+    print("scheduling pipeline for study {0}".format(Study.objects.get(object_id=object_id).id))
+    pipeline_id = PipelineExecutionTracking.pipeline_scheduled(owner_id,
+                                                               Study.objects.get(object_id=object_id).id,
+                                                               datetime.datetime.now(),
+                                                               destination_email_addresses,
+                                                               data_start_datetime,
+                                                               data_end_datetime,
+                                                               participants)
+
+    response = None
+    try:
+        response = client.submit_job(
+            jobName=aws_object_names['job_name'].format(freq=freq),
+            jobDefinition=aws_object_names['job_defn_name'],
+            jobQueue=aws_object_names['queue_name'],
+            containerOverrides={
+                'environment': [
+                    {
+                        'name': 'pipeline_id',
+                        'value': str(pipeline_id),
+                    },
+                    {
+                        'name': 'study_object_id',
+                        'value': str(object_id),
+                    },
+                    {
+                        'name': 'study_name',
+                        'value': Study.objects.get(object_id=object_id).name,
+                    },
+                    {
+                        'name': 'FREQ',
+                        'value': freq,
+                    },
+                    {
+                        'name': 'destination_email_address',
+                        'value': destination_email_addresses,
+                    },
+                    {
+                        'name': 'data_start_datetime',
+                        'value': data_start_datetime,
+                    },
+                    {
+                        'name': 'data_end_datetime',
+                        'value': data_end_datetime,
+                    },
+                    {
+                        'name': 'participants',
+                        'value': participants,
+                    }
+                ],
+            },
+        )
+
+    except Exception as e:
+        PipelineExecutionTracking.pipeline_crashed(pipeline_id, datetime.datetime.now(), str(e))
+        raise
+
+    if response and 'jobId' in response:
+        PipelineExecutionTracking.pipeline_set_batch_job_id(pipeline_id, response['jobId'])
+
+    return
 
 
 # TODO: these are not currently used at all except in a cron job.  Pipeline is being converted (for now)
@@ -163,5 +222,24 @@ def weekly():
 
 
 def monthly():
-    pass
-    # create_all_jobs('monthly
+    create_all_jobs('monthly')
+
+def terminate_job(pipeline_id, user_id, client=None):
+
+    # Get the AWS parameters and client if not provided
+    aws_object_names = get_generic_config()
+
+    # requires region_name be defined.
+    if client is None:
+        client = get_boto_client('batch')
+
+    pipeline = PipelineExecutionTracking.objects.get(id = pipeline_id)
+
+    if not pipeline.batch_job_id:
+        raise ValueError(f'Error terminating pipeline {pipeline_id}, batch job id not found')
+
+    client.terminate_job(jobId=pipeline.batch_job_id, reason=f'Terminated by user {user_id}')
+
+    pipeline.terminate_job(pipeline_id, datetime.datetime.now(), reason=f'Terminated by user {user_id}')
+
+    return
