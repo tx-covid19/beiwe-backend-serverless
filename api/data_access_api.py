@@ -58,7 +58,7 @@ def get_and_validate_study_id(chunked_download=False):
 
     if not override_for_batch and not study.is_test and chunked_download:
         # You're only allowed to download chunked data from test studies
-        print("study '%s' does not allow raw data download." % study.name)
+        print(f"study '{study.name}' does not allow raw data download.")
         return abort(404)
     else:
         return study
@@ -74,7 +74,7 @@ def _get_study_or_abort_404(study_object_id, study_pk):
         try:
             study = Study.objects.get(object_id=study_object_id)
         except Study.DoesNotExist:
-            print("study '%s' does not exist." % study_object_id)
+            print(f"study '{study_object_id}' does not exist.")
             return abort(404)
         else:
             return study
@@ -83,7 +83,7 @@ def _get_study_or_abort_404(study_object_id, study_pk):
         try:
             study = Study.objects.get(pk=study_pk)
         except Study.DoesNotExist:
-            print("study '%s' does not exist." % study_pk)
+            print(f"study '{study_pk}' does not exist.")
             return abort(404)
         else:
             return study
@@ -150,13 +150,13 @@ def get_users_in_study():
     study_object_id = request.values.get("study_id", "")
     # if not is_object_id(study_object_id):
     if not is_object_id(study_object_id):
-        print("provided object id '%s' is not an object id" % study_object_id)
+        print(f"provided object id '{study_object_id}' is not an object id")
         return abort(404)
 
     try:
         study = Study.objects.get(object_id=study_object_id)
     except Study.DoesNotExist:
-        print("study '%s' does not exist" % study_object_id)
+        print(f"study '{study_object_id}' does not exist")
         return abort(404)
 
     get_and_validate_researcher(study)
@@ -269,8 +269,6 @@ def zip_generator(files_list, construct_registry=False):
 
     zip_output = StreamingBytesIO()
     zip_input = ZipFile(zip_output, mode="w", compression=ZIP_STORED, allowZip64=True)
-    # random_id = generate_random_string()[:32]
-    # print "returning data for query %s" % random_id
     try:
         # chunks_and_content is a list of tuples, of the chunk and the content of the file.
         # chunksize (which is a keyword argument of imap, not to be confused with Beiwe Chunks)
@@ -294,7 +292,6 @@ def zip_generator(files_list, construct_registry=False):
             # print len(zip_output)
             x = zip_output.getvalue()
             total_size += len(x)
-            # print "%s: %sK, %sM" % (random_id, total_size / 1024, total_size / 1024 / 1024)
             yield x  # yield the (compressed) file information
             del x
             zip_output.empty()
@@ -318,10 +315,6 @@ def zip_generator(files_list, construct_registry=False):
         # and also to print an error to the log if we need to.
         pool.close()
         pool.terminate()
-        # if duplicate_files:
-        #     duplcate_file_message = "encountered duplicate files: %s" % ",".join(
-        #             str(name_path) for name_path in duplicate_files)
-
 
 
 #########################################################################################
@@ -347,25 +340,22 @@ def determine_file_name(chunk):
     extension = chunk["chunk_path"][-3:]  # get 3 letter file extension from the source.
     if chunk["data_type"] == SURVEY_ANSWERS:
         # add the survey_id from the file path.
-        return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                   chunk["chunk_path"].rsplit("/", 2)[1], # this is the survey id
-                                   str(chunk["time_bin"]).replace(":", "_"), extension)
+        return f'{chunk["participant__patient_id"]}/{chunk["data_type"]}/{chunk["chunk_path"].rsplit("/", 2)[1]}/{str(chunk["time_bin"]).replace(":", "_")}.{extension}'
 
     elif chunk["data_type"] == IMAGE_FILE:
         # add the survey_id from the file path.
-        return "%s/%s/%s/%s/%s" % (
+        return "/".join([
             chunk["participant__patient_id"],
             chunk["data_type"],
             chunk["chunk_path"].rsplit("/", 3)[1],  # this is the survey id
             chunk["chunk_path"].rsplit("/", 2)[1],  # this is the instance of the user taking a survey
-            chunk["chunk_path"].rsplit("/", 1)[1]
-        )
+            chunk["chunk_path"].rsplit("/", 1)[1]])+f".{extension}"
 
     elif chunk["data_type"] == SURVEY_TIMINGS:
         # add the survey_id from the database entry.
-        return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                   chunk["survey__object_id"],  # this is the survey id
-                                   str(chunk["time_bin"]).replace(":", "_"), extension)
+        return "/".join([chunk["participant__patient_id"], chunk["data_type"],
+                         chunk["survey__object_id"],  # this is the survey id
+                         str(chunk["time_bin"]).replace(":", "_")])+f".{extension}"
 
     elif chunk["data_type"] == VOICE_RECORDING:
         # Due to a bug that was not noticed until July 2016 audio surveys did not have the survey id
@@ -373,13 +363,13 @@ def determine_file_name(chunk):
         # correct this.  We can identify those files by checking for the existence of the extra /.
         # When we don't find it, we revert to original behavior.
         if chunk["chunk_path"].count("/") == 4:  #
-            return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                       chunk["chunk_path"].rsplit("/", 2)[1],  # this is the survey id
-                                       str(chunk["time_bin"]).replace(":", "_"), extension)
+            return "/".join([chunk["participant__patient_id"], chunk["data_type"],
+                             chunk["chunk_path"].rsplit("/", 2)[1],  # this is the survey id
+                             str(chunk["time_bin"]).replace(":", "_")])+f".{extension}"
 
     # all other files have this form:
-    return "%s/%s/%s.%s" % (chunk['participant__patient_id'], chunk["data_type"],
-                            str(chunk["time_bin"]).replace(":", "_"), extension)
+    return "/".join([chunk['participant__patient_id'], chunk["data_type"],
+                            str(chunk["time_bin"]).replace(":", "_")])+f".{extension}"
 
 
 def str_to_datetime(time_string):
@@ -417,7 +407,7 @@ def determine_data_streams_for_db_query(query):
 
         for data_stream in query['data_types']:
             if data_stream not in ALL_DATA_STREAMS:
-                print("data stream '%s' is invalid" % data_stream)
+                print(f"data stream '{data_stream}' is invalid")
                 return abort(404)
 
 
@@ -434,7 +424,7 @@ def determine_users_for_db_query(query):
 
         # Ensure that all user IDs are patient_ids of actual Participants
         if not Participant.objects.filter(patient_id__in=query['user_ids']).count() == len(query['user_ids']):
-            print("invalid user ids: %s" % query['user_ids'])
+            print(f"invalid user ids: {query['user_ids']}")
             return abort(404)
 
 
@@ -519,7 +509,7 @@ def data_pipeline_upload():
     errors = []
     for key in request.values.keys():
         if key not in VALID_PIPELINE_POST_PARAMS:
-            errors.append('encountered invalid parameter: "%s"' % key)
+            errors.append(f'encountered invalid parameter: "{key}"')
 
     if errors:
         return Response("\n".join(errors), 400)

@@ -19,7 +19,7 @@ from config.settings import TIMEZONE
 dashboard_api = Blueprint('dashboard_api', __name__)
 
 DATETIME_FORMAT_ERROR = \
-    "Dates and times provided to this endpoint must be formatted like this: 2010-11-22 (%s)" % REDUCED_API_TIME_FORMAT
+    f"Dates and times provided to this endpoint must be formatted like this: 2010-11-22 ({REDUCED_API_TIME_FORMAT{)"
 
 
 @dashboard_api.route("/dashboard/<string:study_id>", methods=["GET"])
@@ -136,9 +136,6 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     data_stream_dict = {}
     data_stream_dict.update(complete_data_stream_dict)
     data_stream_dict.update(all_survey_streams)
-
-    print(f'{data_stream}')
-    print(f'{all_survey_streams}')
 
     if data_stream in ALL_DATA_STREAMS:
         first_data_date, last_data_date, stream_data = \
@@ -815,7 +812,7 @@ def extract_data_stream_args_from_request():
     data_stream = request.values.get("data_stream", None)
     if data_stream:
         if data_stream not in ALL_DATA_STREAMS:
-            return abort(400, "unrecognized data stream '%s'" % data_stream)
+            return abort(400, f"unrecognized data stream '{data_stream}'")
     return data_stream
 
 
