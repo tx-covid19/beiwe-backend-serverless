@@ -33,7 +33,7 @@ def dashboard_page(study_id):
     all_survey_streams = {}
     for survey in Survey.objects.filter(study=study_id):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.object_id} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
 
     ## update the total list of streams
     data_stream_dict = {}
@@ -131,11 +131,14 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     all_survey_streams = {}
     for survey in Survey.objects.filter(study=study_id):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.object_id} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
 
     data_stream_dict = {}
     data_stream_dict.update(complete_data_stream_dict)
     data_stream_dict.update(all_survey_streams)
+
+    print(f'{data_stream}')
+    print(f'{all_survey_streams}')
 
     if data_stream in ALL_DATA_STREAMS:
         first_data_date, last_data_date, stream_data = \
