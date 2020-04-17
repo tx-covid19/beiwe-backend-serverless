@@ -19,7 +19,7 @@ from config.settings import TIMEZONE
 dashboard_api = Blueprint('dashboard_api', __name__)
 
 DATETIME_FORMAT_ERROR = \
-    f"Dates and times provided to this endpoint must be formatted like this: 2010-11-22 ({REDUCED_API_TIME_FORMAT{)"
+    f"Dates and times provided to this endpoint must be formatted like this: 2010-11-22 ({REDUCED_API_TIME_FORMAT})"
 
 
 @dashboard_api.route("/dashboard/<string:study_id>", methods=["GET"])
