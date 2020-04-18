@@ -57,16 +57,11 @@ def settings():
     info_set = ParticipantInfo.objects.filter(user__patient_id__exact=current_patient)
     if info_set.exists():
         info = info_set.get()
-        fields = ['country', 'zipcode', 'timezone']
+        fields = ['country', 'state', 'zipcode', 'timezone']
         for field in fields:
             if field in request.json:
                 setattr(info, field, request.json[field])
         info.save()
         return jsonify({'msg': 'Info updated'}), 200
     else:
-        user = Participant.objects.get(patient_id__exact=current_patient)
-        info = ParticipantInfo(user=user, country=request.json.get('country', 'United States'),
-                               zipcode=request.json.get('zipcode', '00001'),
-                               timezone=request.json.get('timezone', 'UTC'))
-        info.save()
-        return jsonify({'msg': 'Created'}), 201
+        return jsonify({'msg': 'User information not found.'}), 403
