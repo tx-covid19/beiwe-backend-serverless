@@ -16,15 +16,19 @@ def overview_handler():
     patient_id = get_jwt_identity()
 
     records = TrackerRecordSerializer(TrackRecord.objects.filter(user__patient_id=patient_id), many=True).data
-
     covid_cases = {}
     pollen = {}
     weather = {}
+    queue_url = ''
 
-    country, zipcode = ParticipantInfo.get_country_zipcode(patient_id)
-
-    if country and zipcode:
-        covid_cases = CovidCaseSerializer(CovidCase.latest_record(country, zipcode)).data
+    info_set = ParticipantInfo.objects.filter(user__patient_id__exact=patient_id)
+    if info_set.exists():
+        info: ParticipantInfo = info_set.get()
+        country = info.country
+        state = info.state
+        zipcode = info.zipcode
+        queue_url = info.queue_url
+        covid_cases = CovidCaseSerializer(CovidCase.latest_record(country, state, zipcode)).data
         pollen = PollenSerializer(Pollen.latest_record(country, zipcode)).data
         weather = WeatherSerializer(Weather.latest_record(country, zipcode)).data
 
@@ -38,5 +42,6 @@ def overview_handler():
         },
         'weather': {
             **weather
-        }
+        },
+        'queue_url': queue_url
     }), 200
