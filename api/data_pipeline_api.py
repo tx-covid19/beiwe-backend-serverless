@@ -133,10 +133,9 @@ def terminate_pipeline(study_id):
     :param study_id: Primary key of a Study
     """
 
-    username = session["admin_username"]
+    username = get_session_researcher()
 
     pipeline_id = request.values['pipeline_id']
-    flash('terminating pipeline {0}'.format(pipeline_id))
 
     error_sentry = make_error_sentry("data", tags={"pipeline_frequency": "terminate_job manually"})
     # Get new data access credentials for the manual user, submit a manual job, display message
@@ -151,4 +150,4 @@ def terminate_pipeline(study_id):
     else: 
         flash('Pipeline {0} terminated.'.format(pipeline_id), 'success')
 
-    return redirect('/data-pipeline/{:s}'.format(study_id))
+    return redirect('/job-queue')
