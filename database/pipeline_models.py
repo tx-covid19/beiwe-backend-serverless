@@ -6,6 +6,7 @@ from database.models import AbstractModel
 from database.user_models import Researcher
 from database.study_models import Study
 
+
 class PipelineExecutionTracking(AbstractModel):
 
     researcher = models.ForeignKey('Researcher', on_delete=models.PROTECT, related_name='researcher_pipelines')
@@ -54,7 +55,7 @@ class PipelineExecutionTracking(AbstractModel):
 
         try:  
             pipeline_object = cls.objects.get(pk=pipeline_id)
-        except Pipeline.DoesNotExist:
+        except PipelineExecutionTracking.DoesNotExist:
             print('Could not find pipeline {0} in pipeline database'.format(pipeline_id))
             raise
 
@@ -70,9 +71,9 @@ class PipelineExecutionTracking(AbstractModel):
         pipeline_object = cls.objects.get(pk=pipeline_id)
 
         pipeline_object.update( 
-            execution_status = 'completed',
-            execution_end_datetime = end_timestamp,
-            execution_time_minutes = (end_timestamp - pipeline_object.execution_start_datetime).seconds / 60.0
+            execution_status='completed',
+            execution_end_datetime=end_timestamp,
+            execution_time_minutes=(end_timestamp - pipeline_object.execution_start_datetime).seconds / 60.0
             )
        
         return
