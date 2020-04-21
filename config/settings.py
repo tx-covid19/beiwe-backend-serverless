@@ -46,3 +46,5 @@ BOX_clientID = getenv('BOX_clientID')
 BOX_clientSecret = getenv('BOX_clientSecret')
 BOX_enterpriseID = getenv('BOX_enterpriseID')
 BOX_registration_callback = getenv('BOX_registration_callback')
+
+PIPELINE_SG = getenv('PIPELINE_SG')
