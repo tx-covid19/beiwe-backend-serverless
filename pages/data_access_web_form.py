@@ -51,7 +51,7 @@ def pipeline_download_page():
     # dict of {study ids : list of user ids}
 
     users_by_study = {str(study['id']):
-                      [user.id for user in Participant.objects.filter(study__id=study['id'])]
+                      [user.id for user in Participant.objects.filter(device_id__isnull=False, study__id=study['id']).exclude(device_id='')]
                       for study in iteratable_studies}
 
     # it is a bit obnoxious to get this data, we need to deduplcate it and then turn it back into a list
@@ -123,7 +123,7 @@ def copy_data_to_box_page():
         # dict of {study ids : list of user ids}
 
         users_by_study = {str(study['id']):
-                          sorted([user.patient_id for user in Participant.objects.filter(study__id=study['id'])])
+                          sorted([user.patient_id for user in Participant.objects.filter(device_id__isnull=False, study__id=study['id']).exclude(device_id='')])
                           for study in iteratable_studies}
 
         # it is a bit obnoxious to get this data, we need to deduplcate it and then turn it back into a list
