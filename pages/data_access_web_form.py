@@ -113,7 +113,7 @@ def copy_data_to_box_page():
     if not researcher.has_box_integration():
         return render_template(
                 "box_integration.html",
-                registration_url=get_registration_url(researcher.username),
+                registration_url=get_registration_url(),
                 username=researcher.username,
                 is_admin=researcher_is_an_admin()
                 )
