@@ -2,6 +2,7 @@ from flask import abort, Blueprint, flash, Markup, redirect, render_template, re
 
 from database.study_models import Study, StudyField
 from database.user_models import Participant, ParticipantFieldValue, Researcher, ParticipantAliases
+from database.pipeline_models import PipelineExecutionTracking
 from libs import admin_authentication
 from libs.admin_authentication import (authenticate_researcher_login,
     authenticate_researcher_study_access, get_researcher_allowed_studies,
@@ -111,12 +112,28 @@ def view_study(study_id=None):
     )
 
 
+@admin_pages.route('/job-queue', methods=['GET'])
+def view_job_queue(study_id=None):
+
+    researcher = Researcher.objects.get(username=session[SESSION_NAME])
+    if researcher.site_admin:
+        pipelines = PipelineExecutionTracking.objects.filter(deleted=False)
+    else:
+        pipelines = researcher.researcher_pipelines.all()
+
+    return render_template(
+        'job-queue.html',
+        username=researcher.username,
+        pipelines=pipelines,
+        allowed_studies=get_researcher_allowed_studies(),
+    )
+
 @admin_pages.route('/data-pipeline/<string:study_id>', methods=['GET'])
 @authenticate_researcher_study_access
 def view_study_data_pipeline(study_id=None):
     study = Study.objects.get(pk=study_id)
     pipelines = study.study_pipelines.all()
-    study_participants = [str(user.patient_id) for user in study.participants.exclude(os_type__exact='')]
+    study_participants = [str(user.patient_id) for user in study.participants.exclude(device_id__isnull=True, os_type__exact='')]
 
     return render_template(
         'data-pipeline.html',
