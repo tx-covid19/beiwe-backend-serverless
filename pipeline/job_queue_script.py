@@ -9,8 +9,9 @@ from time import sleep
 
 import boto3
 
-from configuration_getters import get_aws_object_names, get_configs_folder, get_current_region
-from script_helpers import set_default_region
+from pipeline.configuration_getters import get_aws_object_names, get_configs_folder, get_current_region
+from pipeline.script_helpers import set_default_region
+from config.settings import PIPELINE_SG
 
 
 def run(repo_uri, ami_id):
@@ -147,7 +148,7 @@ def run(repo_uri, ami_id):
     # (the raise condition above is sufficient for this potential unbound local error)
     batch_client = boto3.client('batch')
     compute_environment_dict['imageId'] = ami_id
-    compute_environment_dict['securityGroupIds'] = [group_id]
+    compute_environment_dict['securityGroupIds'] = [PIPELINE_SG, group_id]
 
     final_comp_env_name = create_compute_environment(
         batch_client, compute_environment_dict, default_comp_env_name, comp_env_role_arn
@@ -167,7 +168,7 @@ def run(repo_uri, ami_id):
             'value': aws_object_names['secret_key_ssm_name'],
         }, {
             'name': 'region_name',
-            'value': get_current_region(),
+            'value': str(get_current_region()),
         }
     ]
 
