@@ -98,6 +98,7 @@ def run_manual_code(study_id):
 
                 if participant.chunk_registries.filter(**query_filter).count() > 0:
                     create_one_job('manually', object_id, session_researcher.username,
+                            'run_pipeline',
                             destination_email_addresses=destination_email_addresses_string,
                             data_start_datetime=data_start_time,
                             data_end_datetime=data_end_time,
