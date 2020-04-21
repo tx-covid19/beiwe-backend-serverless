@@ -18,9 +18,10 @@ from libs.streaming_bytes_io import StreamingBytesIO
 
 from database.data_access_models import PipelineUpload, InvalidUploadParameterError, \
     PipelineUploadTags
-
+from pipeline.index import create_one_job
 from boxsdk import OAuth2, Client
 from config.settings import BOX_clientID, BOX_clientSecret, BOX_enterpriseID, BOX_registration_callback
+from libs.admin_authentication import get_session_researcher, authenticate_researcher_study_access
 # Data Notes
 # The call log has the timestamp column as the 3rd column instead of the first.
 # The Wifi and Identifiers have timestamp in the file name.
@@ -208,7 +209,9 @@ def get_data():
                 mimetype="zip",
         )
 
+
 @data_access_api.route("/submit-copy-request/v1", methods=['POST', "GET"])
+@authenticate_researcher_study_access
 def submit_copy_request():
     """ Required: access key, access secret, study_id
     JSON blobs: data streams, users - default to all
@@ -221,19 +224,21 @@ def submit_copy_request():
         but does not exist in request.values() )
     Returns a zip file of all data files found by the query. """
 
-    # uncomment the following line when doing a reindex
-    # return abort(503)
+    study = Study.objects.get(pk=request.values.get("study_id"))
+    if not study:
+        print(f'Could not find study for {request.values.get("study_id")}')
+        return abort(404)
 
-    #study = get_and_validate_study_id(chunked_download=True)
-    #get_and_validate_researcher(study)
+    session_researcher = get_session_researcher()
 
-    query = {'email_address':request.values['email_address'],
-             'box_directory':request.values['box_directory']
+    query = {'email_address': request.values['email_address'],
+             'box_directory': request.values['box_directory'],
+             'study_id': request.values['study_id'],
     }
 
-    determine_data_streams_for_db_query(query)  # select data streams
     determine_users_for_db_query(query)  # select users
-    determine_time_range_for_db_query(query)  # construct time ranges
+
+    determine_data_streams_for_db_query(query)
 
     print(f'submitting data copy request {query}')
 
@@ -241,6 +246,18 @@ def submit_copy_request():
     # and don't want to create a registry file.
     # Oddly, it is the presence of  mimetype=zip that causes the streaming response to actually stream.
     msg = f"Copy request submitted, status emails will be sent to {request.values['email_address']}"
+
+    create_one_job('manually',
+                   study.object_id,
+                   session_researcher.username,
+                   'copy_to_box',
+                   destination_email_addresses=query['email_address'],
+                   participants=query['user_ids'],
+                   datastreams=query['data_types'],
+                   job_type='copy_to_box',
+                   box_directory=query['box_directory'],
+                   webserver=True)
+
     if 'web_form' in request.values:
         flash(Markup(msg), 'success')
         return redirect("/copy_data_to_box_form")
