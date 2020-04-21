@@ -16,7 +16,7 @@ from github import Github
 
 def endpoint(country_code, zipcode):
     API_KEY = ''
-    return f'https://api.openweathermap.org/data/2.5/weather?zip={zipcode},{country_code}&appid={API_KEY}'
+    return f'https://api.openweathermap.org/data/2.5/weather?zip={zipcode},{country_code}&appid={API_KEY}&units=metric'
 
 
 def is_us(country):
