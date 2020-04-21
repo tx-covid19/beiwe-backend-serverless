@@ -27,7 +27,7 @@ DATETIME_FORMAT_ERROR = \
 def dashboard_page(study_id):
     study = get_study_or_404(study_id)
     """ information for the general dashboard view for a study"""
-    participants = list(Participant.objects.filter(study=study_id, device_id__isnull=False).\
+    participants = list(Participant.objects.filter(study=study_id, device_id__isnull=False).exclude(device_id='').\
             values_list("patient_id", flat=True).order_by('patient_id'))
 
     all_survey_streams = {}
