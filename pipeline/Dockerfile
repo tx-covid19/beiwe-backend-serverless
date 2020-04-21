@@ -26,6 +26,7 @@ ADD beiwe-backend beiwe-backend
 
 # Install python requirements
 RUN ["pip3", "install", "--upgrade", "pip"]
+RUN ["pip3", "install", "-r", "beiwe-backend/requirements.txt"]
 RUN ["pip3", "install", "-r", "beiwe-backend/pipeline/Beiwe-Analysis/Pipeline/python3-requirements.txt"]
 
 # Install R requirements
