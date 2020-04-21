@@ -1,10 +1,11 @@
 from datetime import timedelta
-
 from django.db import models
 from django.utils import timezone
 from database.models import AbstractModel
 from database.user_models import Researcher
 from database.study_models import Study
+from django.contrib.postgres.fields import JSONField
+import json
 
 
 class PipelineExecutionTracking(AbstractModel):
@@ -16,7 +17,8 @@ class PipelineExecutionTracking(AbstractModel):
     email_address_list = models.CharField(max_length=256, blank=True, null=True)
     query_start_datetime = models.CharField(max_length=256, blank=True, null=True)
     query_end_datetime = models.CharField(max_length=256, blank=True, null=True)
-    participants = models.CharField(max_length=256, blank=True, null=True)
+    participants = JSONField(blank=True, null=True)
+    datastreams = JSONField(blank=True, null=True)
     job_type = models.CharField(max_length=256, blank=True, null=True)
     box_directory = models.CharField(max_length=256, blank=True, null=True)
 
@@ -30,11 +32,27 @@ class PipelineExecutionTracking(AbstractModel):
     
     @classmethod
     def pipeline_scheduled(cls, researcher_name, study_id, submission_timestamp,
-        email_address_list, query_start_datetime, query_end_datetime, participants, job_type, box_directory):
+        email_address_list, query_start_datetime, query_end_datetime, participants, datastreams, job_type, box_directory):
 
         researcher = Researcher.objects.get(username = researcher_name)
 
         study = Study.objects.get(pk=study_id)
+
+        if not isinstance(participants, list):
+            if ',' in participants:
+                participants = participants.split(',')
+            elif ' ' in participants:
+                participants = participants.split(' ')
+            else:
+                participants = [participants]
+
+        if not isinstance(datastreams, list):
+            if ',' in datastreams:
+                datastreams = datastreams.split(',')
+            elif ' ' in datastreams:
+                datastreams = datastreams.split(' ')
+            else:
+                datastreams = [datastreams]
 
         obj=cls.objects.create(
             researcher = researcher,
@@ -43,7 +61,8 @@ class PipelineExecutionTracking(AbstractModel):
             email_address_list = email_address_list,
             query_start_datetime = query_start_datetime,
             query_end_datetime = query_end_datetime,
-            participants = participants,
+            participants = json.dumps(participants),
+            datastreams = json.dumps(datastreams),
             job_type = job_type,
             box_directory = box_directory,
             execution_status = 'queued')
