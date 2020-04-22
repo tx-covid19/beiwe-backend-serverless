@@ -6,7 +6,7 @@ from database.study_models import Study
 import os
 import argparse
 import config.remote_db_env
-from libs.s3 import s3_retrieve, check_for_client_key_pair, s3_list_files, s3_upload, s3_upload_not_encrypted
+from libs.s3 import s3_retrieve, check_for_client_key_pair, s3_list_files, s3_upload
 import libs.box as box
 from multiprocessing.pool import ThreadPool
 from config.constants import (ALL_DATA_STREAMS, ALL_RESEARCHER_TYPES, REVERSE_UPLOAD_FILE_TYPE_MAPPING,
