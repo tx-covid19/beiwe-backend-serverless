@@ -21,7 +21,7 @@ def export_study_settings_file(study_id):
     study = Study.objects.get(pk=study_id)
     filename = study.name.replace(' ', '_') + "_surveys_and_settings.json"
 
-    surveys = [s.as_native_python() for s in study.surveys.all()]
+    surveys = [s.as_native_python() for s in study.surveys.exclude(deleted=True).all()]
     device_settings = study.get_study_device_settings().as_native_python()
     output = {
         'surveys': surveys,
@@ -29,7 +29,7 @@ def export_study_settings_file(study_id):
     }
 
     return Response(
-        dumps(output),
+        dumps(output, indent=4),
         mimetype="application/json",
         headers={'Content-Disposition': 'attachment;filename=' + filename}
     )
