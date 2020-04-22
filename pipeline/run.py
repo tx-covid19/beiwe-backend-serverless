@@ -4,6 +4,7 @@ import datetime
 from config.constants import API_TIME_FORMAT
 from libs.ses import ses_send_email
 from database.pipeline_models import PipelineExecutionTracking
+import json
 
 
 def run():
@@ -13,19 +14,27 @@ def run():
     pipeline_function = getenv('pipeline_function')
     pipeline_id = int(getenv('pipeline_id'))
 
-    if pipeline_id:
-        PipelineExecutionTracking.pipeline_started(pipeline_id, datetime.datetime.now())
-    else:
+    if not pipeline_id:
         raise ValueError("pipeline_id either wasn't found in the environment, or it was set to empty.")
 
+    PipelineExecutionTracking.pipeline_started(pipeline_id, datetime.datetime.now())
+
     if pipeline_function == 'copy_to_box':
+
+        participants = None
+        if getenv('participants'):
+            participants = json.loads(getenv('participants'))
+
+        datastreams = None
+        if getenv('datastreams'):
+            datastreams = json.loads(getenv('datastreams'))
 
         download_request = {
             'username': getenv('owner_id'),
             'datetime': getenv('request_datetime'),
             'study_object_id': getenv('study_object_id'),
-            'datastreams': getenv('datastreams').split(',') if getenv('datastreams') else None,
-            'patient_ids': getenv('participants').split(',') if getenv('participants') else None,
+            'datastreams': datastreams,
+            'patient_ids': participants,
             'box_directory': getenv('box_directory'),
         }
 
