@@ -11,6 +11,7 @@ from pipeline.configuration_getters import get_eb_config, get_generic_config
 from config.constants import API_TIME_FORMAT
 import datetime
 import os
+import json
 
 
 def str_to_datetime(time_string):
@@ -123,16 +124,34 @@ def create_one_job(freq, object_id, owner_id, pipeline_function, destination_ema
         client = get_boto_client('batch', os.getenv("pipeline_region", None))
 
     # clean up list of participants
-    if isinstance(participants, list):
-        participants = " ".join(participants)
-    elif ',' in participants:
-        participants = " ".join(participants.split(','))
+    if isinstance(participants, str):
+        participants = participants.rstrip().lstrip()
+     
+        if ',' or ' ' in participants:
+            if ',' in participants:
+                delim = ','
+            elif ' ' in participants:
+                delim = ' '
+            participants = [pt for pt in participants.split(delim) if pt]
+        else:
+            participants = [participants]
 
-    # clean up the list of datastreams
-    if isinstance(datastreams, list):
-        datastreams = " ".join(datastreams)
-    elif ',' in datastreams:
-        datastreams = " ".join(datastreams.split(','))
+    participants = json.dumps(participants)
+
+    # clean up list of datastreams
+    if isinstance(datastreams, str):
+        datastreams = datastreams.rstrip().lstrip()
+     
+        if ',' or ' ' in datastreams:
+            if ',' in datastreams:
+                delim = ','
+            elif ' ' in datastreams:
+                delim = ' '
+            datastreams = [pt for pt in datastreams.split(delim) if pt]
+        else:
+            datastreams = [datastreams]
+
+    datastreams = json.dumps(datastreams)
 
     # clean up list of destination email addresses
     if isinstance(destination_email_addresses, list):
@@ -153,6 +172,7 @@ def create_one_job(freq, object_id, owner_id, pipeline_function, destination_ema
                                                                data_start_datetime,
                                                                data_end_datetime,
                                                                participants=participants,
+                                                               datastreams=datastreams,
                                                                job_type=job_type,
                                                                box_directory=box_directory)
 

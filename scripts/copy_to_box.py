@@ -3,6 +3,7 @@ import datetime
 from config.constants import API_TIME_FORMAT, ALL_DATA_STREAMS
 from pipeline.run import run
 import subprocess
+import json
 
 
 if __name__ == "__main__":
@@ -21,10 +22,11 @@ if __name__ == "__main__":
     pipeline_function = 'copy_to_box'
     destination_email_addresses = ['cameron.craddock@gmail.com']
     datastreams = ALL_DATA_STREAMS
-    participants = ['bayw6h9b']
+    participants = ['1adkek2h', '37sb8wql', '48hekr1g', '51opds1x', '63zkl16v', 'bayw6h9b', 'ctyscd4b', 'derjasj9', 'drs2jy5f', 'fi577z38', 'gqpcflwk', 'kyys2qo6', 'naucsx6v', 'rjcs3hyw', 'rkem5aou', 'synympvt', 'xw31f35c']
     box_directory = 'beiwe_export'
     data_start_datetime = None
     data_end_datetime = None
+
 
     environment = [
         {
@@ -65,11 +67,11 @@ if __name__ == "__main__":
         },
         {
             'name': 'participants',
-            'value': ','.join(participants),
+            'value': json.dumps(participants),
         },
         {
             'name': 'datastreams',
-            'value': ','.join(datastreams),
+            'value': json.dumps(datastreams),
         },
         {
             'name': 'box_directory',
