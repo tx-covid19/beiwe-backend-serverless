@@ -48,3 +48,7 @@ BOX_enterpriseID = getenv('BOX_enterpriseID')
 BOX_registration_callback = getenv('BOX_registration_callback')
 
 PIPELINE_SG = getenv('PIPELINE_SG')
+
+# Redcap credentials
+REDCAP_SERVER_URL = getenv('REDCAP_SERVER_URL')
+REDCAP_API_TOKEN = getenv('REDCAP_API_TOKEN')

@@ -22,3 +22,6 @@ python-dateutil
 
 jinja2
 boxsdk
+
+# redcap
+PyCap
