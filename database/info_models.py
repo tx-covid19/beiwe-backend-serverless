@@ -27,13 +27,14 @@ def save_weather(country: str, zipcode):
     if is_us(country):
         country_code = 'us'
     else:
+        # must use country code as weather API requests
         country_code = iso3166.countries_by_name[country.upper()].alpha2.lower()
 
     try:
         r = requests.get(endpoint(country_code, zipcode), timeout=30)
         data = r.json()
         weather = data['weather'][0]['main']
-        temperature = data['main']['temp']  # Kevin
+        temperature = data['main']['temp']
         humidity = data['main']['humidity']
         updated_time = datetime.utcfromtimestamp(int(data['dt']))
         Weather(last_updated=updated_time, country=country, zipcode=zipcode, weather=weather, temperature=temperature,
@@ -141,6 +142,25 @@ def brazil_detail():
         pass
 
 
+def mexico_detail():
+    try:
+        r = requests.get(
+            'https://api.apify.com/v2/key-value-stores/vpfkeiYLXPIDIea2T/records/LATEST?disableRedirect=true',
+            timeout=30)
+        mx_data = r.json()
+        last_updated = dateutil.parser.isoparse(mx_data['lastUpdatedAtSource'])
+        total = int(mx_data['infected'])
+        deaths = int(mx_data['deceased'])
+        for name, count in mx_data['State'].items():
+            CovidCase(last_updated=last_updated, country='Mexico', state=name,
+                      nation_total=total,
+                      nation_deaths=deaths, local_total=count['infected'],
+                      local_deaths=count['deceased']).save()
+
+    except:
+        pass
+
+
 def map_to_county_level(info_list: List[Dict], state_full_name=False):
     info_list = info_list
     geo_dict = defaultdict(list)
@@ -213,12 +233,6 @@ def save_covid(info_list):
                           nation_total=country_stat['Canada']['total'],
                           nation_deaths=country_stat['Canada']['deaths'], local_total=confirmed,
                           local_deaths=deaths).save()
-            elif country == 'Mexico':
-                # Save total, need other sources for detail
-                country_stat[country] = {
-                    'total': confirmed,
-                    'deaths': deaths
-                }
             elif state == 'Puerto Rico':
                 # Count it as a single dt point
                 CovidCase(last_updated=last_update, country=state, state=state,
@@ -227,6 +241,9 @@ def save_covid(info_list):
 
         # Let Brazil in
         brazil_detail()
+
+        # Let Mexico in
+        mexico_detail()
 
     except:
         pass
