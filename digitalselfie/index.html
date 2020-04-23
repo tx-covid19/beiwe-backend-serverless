@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload your digital selfie!</title>
+</head>
+<style>
+.error {
+  padding: 8px;
+  background-color: red;
+  color: white;
+}
+</style>
+
+<body>
+
+	<div class="content">
+    <h1>Upload your digital selfie</h1>
+
+    <p>Please upload a screenshot of your mobile phone's screen time usage for the past week.</p>
+
+    <p>Instructions for taking a digital selfie.</p>
+
+    <form action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
+
+	<label for="beiwe_username">Beiwe username:</label><br>
+        <input type="text" id="username" name="beiwe_username"><br>
+        <label for="beiwe_password">Beiwe password:</label><br>
+	<input type="text" id="password" name="beiwe_password"><br><br><br>
+	<label for="user_file">Upload Your File</label><br>
+        <br></br>
+        <input type="file" name="user_file">
+        <br></br>
+        <button type="submit">Upload</button>
+    </form>
+
+	</div>
+</body>
+
+</html>
