@@ -12,7 +12,7 @@ class ParticipantInfo(models.Model):
         ('Puerto Rico', 'Puerto Rico')
     ]
 
-    user = models.OneToOneField(Participant, on_delete=models.PROTECT)
+    user = models.OneToOneField(Participant, on_delete=models.CASCADE)
 
     country = models.CharField(max_length=100, choices=SUPPORT_COUNTRIES)
     # For Puerto Rico, country == state

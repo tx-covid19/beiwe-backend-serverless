@@ -8,7 +8,7 @@ from .userinfo_models import ParticipantInfo
 
 
 class TrackRecord(models.Model):
-    user = models.ForeignKey(Participant, on_delete=models.PROTECT)
+    user = models.ForeignKey(Participant, on_delete=models.CASCADE)
     last_update = models.DateTimeField(default=timezone.now)
 
     track_date = models.DateTimeField(unique=True)
