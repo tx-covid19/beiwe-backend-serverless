@@ -139,8 +139,8 @@ class Participant(AbstractPasswordUser):
         the hashing for you for use on the command line. This is necessary
         for manually checking that setting and validating passwords work.
         """
-        compare_me = device_hash(compare_me)
-        return compare_password(compare_me, self.salt, self.password)
+        compare_me = device_hash(compare_me.encode())
+        return compare_password(compare_me, self.salt.encode(), self.password.encode())
 
     def set_device(self, device_id):
         self.device_id = device_id
