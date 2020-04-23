@@ -7,7 +7,8 @@ services:
       bash -c "
         python manage.py makemigrations &&
         python manage.py migrate &&
-        python manage.py create_default_login &&
+        (python manage.py create_default_login || true) &&
+        (python manage.py create_default_participant || true) &&
         python app.py
       "
     volumes:
