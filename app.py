@@ -8,7 +8,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import load_django
 
-from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
+from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api, external_api,
     mobile_api, participant_administration, survey_api)
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 from libs.admin_authentication import is_logged_in
@@ -29,6 +29,7 @@ def subdomain(directory):
 # Register pages here
 app = subdomain("frontend")
 app.jinja_env.globals['current_year'] = datetime.now().strftime('%Y')
+app.register_blueprint(external_api.external_api)
 app.register_blueprint(mobile_api.mobile_api)
 app.register_blueprint(admin_pages.admin_pages)
 app.register_blueprint(mobile_pages.mobile_pages)
