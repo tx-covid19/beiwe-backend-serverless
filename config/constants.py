@@ -30,6 +30,7 @@ CELERY_EXPIRY_MINUTES = getenv("CELERY_EXPIRY_MINUTES") or 14
 CELERY_ERROR_REPORT_TIMEOUT_SECONDS = getenv("CELERY_ERROR_REPORT_TIMEOUT_SECONDS") or 60*15
 
 # Data streams and survey types
+ALLOWED_SELFIE_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 ALLOWED_EXTENSIONS = {'csv', 'json', 'mp4', "wav", 'txt', 'jpg'}
 PROCESSABLE_FILE_EXTENSIONS = [".csv", ".mp4", ".wav"]
 # These don't appear to be used...
