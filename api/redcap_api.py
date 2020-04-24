@@ -14,7 +14,10 @@ EXPECTED_INSTRUMENT_NAME = 'online_consent_form'
 @redcap_api.route('/user/redcap', methods=['POST'])
 def redcap_handler():
     instrument = request.form.get('instrument', '')
-    if instrument != EXPECTED_INSTRUMENT_NAME:
+    instrument_completed = request.form.get(EXPECTED_INSTRUMENT_NAME + '_complete', '')
+    event_user = request.form.get('username', '')
+
+    if instrument != EXPECTED_INSTRUMENT_NAME or instrument_completed != '2' or event_user != '[survey respondent]':
         return jsonify({'msg': 'Request ignored.'}), 200
 
     study_id = request.args.get('study_id', '')
