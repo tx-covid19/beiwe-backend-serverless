@@ -19,26 +19,29 @@
         <div class="container">
             <div style="background:rgb(191,87,0) !important; color:white !important;" class="jumbotron">
             <h1>Upload Your Digital Selfie</h1>
-		<p class="font-italic">Behavioral & Psychological Responses to the COVID-19 Pandemic:<br>
-			A SmartPhone Sensing Study</p>
+		<p class="font-italic">Behavioral & Psychological Responses to the COVID-19 Pandemic: A SmartPhone Sensing Study</p>
             </div>
 
         <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
+	    <input type="hidden" name="error_url" value="https://digitalselfie.ut-wcwh.org/upload_error.html">
+	    <input type="hidden" name="success_url" value="https://digitalselfie.ut-wcwh.org/success.html">
             <div class="form-row form-group">
-                <input type="email" class="form-control" name="beiwe_username" placeholder="Beiwe Username" autocomplete="username">
+                <input type="user-text-field" class="form-control" name="username" placeholder="Beiwe Username" autocomplete="username" required>
             </div>
             <div class="form-row form-group">
-	        <input id="password-text-field" type="password" class="form-control" name="beiwe_password" placeholder="Beiwe Password" autocomplete="current-password">
+	        <input id="password-text-field" type="password" class="form-control" name="password" placeholder="Beiwe Password" autocomplete="current-password" required>
 	    </div>
 
             <div class="form-row form-group custom-file">
-                <input type="file" class="custom-file-input" id="customFile" name="user_files" multiple>
+                <input type="file" class="custom-file-input" id="customFile" name="user_files" multiple required>
                 <label class="custom-file-label pr-2" for="customFile">Choose file(s)</label>
             </div>
 
             <div class="form-row form-group">
                 <button type="submit" name="upload" value="upload" id="upload" class="btn btn-block btn-success float-right mt-3">Upload</button>
             </div>
+
+
         </form>
 
 	<p class="mt-5">Please upload a "digital selfie" of your app usage by completing the following steps (or a <a href="https://drive.google.com/open?id=1BnJnmM-GDughAHlyJnaH58sY05_Vhs1jR0yviHeAR6o"> more detailed step-by-step guide).</a> If you have problems, please email <a href="mailto:utcovid19study@austin.utexas.edu">utcovid19study@austin.utexas.edu</a></p>

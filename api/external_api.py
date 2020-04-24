@@ -2,6 +2,7 @@ import calendar
 import time
 import datetime
 
+from django.core.validators import URLValidator
 from django.utils import timezone
 from flask import abort, Blueprint, json, render_template, request, redirect
 from werkzeug.datastructures import FileStorage
@@ -71,56 +72,58 @@ def upload_digital_selfie():
     properly converted to Base64 encoded text, as a request parameter entitled "file".
     Provide the file name in a request parameter entitled "filename". """
 
-    print(f"received {request.values} {request.files['user_files']} {request.files.getlist('user_files')}")
-
+    url_validator = URLValidator()
 
     try:
-        patient_id = request.values['beiwe_username'].lower()
+
+        error_url = request.values['error_url']
+        url_validator(error_url)
+
+        success_url = request.values['success_url']
+        url_validator(success_url)
+
+    except:
+        # malformed request doesnt include error or succes_url
+        # or they are not correctly formatted 
+        return abort(403)
+
+    try:
+        patient_id = request.values['username'].lower()
         user = Participant.objects.get(patient_id=patient_id)
     except:
-        print('user could not be found')
-        return abort(403)
+        return redirect(error_url)
+        #return abort(403)
 
     try:
-        password = request.values['beiwe_password']
+        password = request.values['password']
     except:
-        print('password was not found')
-        return abort(403)
+        return redirect(error_url)
+        #return abort(403)
 
-    if not user.debug_validate_password(request.values['beiwe_password']):
-        print('password is incorrect')
-        return abort(403)
-
-    print('participant verified')
+    if not user.debug_validate_password(password):
+        return redirect(error_url)
+        #return abort(403)
 
     if 'user_files' not in request.files:
-        print('could not find user_file')
+        return redirect(error_url)
 
     for uploaded_file in request.files.getlist("user_files"):
 
         filename = secure_filename(uploaded_file.filename)
 
-        print(f'received {filename}')
-
         if isinstance(uploaded_file, FileStorage):
-            print('its a file')
             uploaded_file = uploaded_file.read()
         elif isinstance(uploaded_file, str):
-            print('its a string')
             uploaded_file = uploaded_file.encode()
         elif isinstance(uploaded_file, bytes):
-            print('its bytes')
             # not current behavior on any app
             pass
         else:
             print('we dont know what it is')
-            raise TypeError("uploaded_file was a %s" % type(uploaded_file))
-
-        print('preparing to upload')
-        print(contains_valid_selfie_extension(filename))
+            return redirect(f'{DIGITAL_SELFIE_URL}/upload_error.html')
+            #raise TypeError("uploaded_file was a %s" % type(uploaded_file))
 
         filename=f'RAW_DATA/{user.study.object_id}/{user.patient_id}/digital_selfie/{user.patient_id}_{datetime.datetime.now().isoformat()}.{grab_file_extension(filename)}'
-
         print(f'uploading file to {filename}')
 
         # print "decryption success:", filename
@@ -157,5 +160,5 @@ def upload_digital_selfie():
             sentry_client = make_sentry_client('eb', tags)
             sentry_client.captureMessage(error_message)
             
-            return redirect('https://digitalselfie.ut-wcwh.org/error.html')
-    return redirect('https://digitalselfie.ut-wcwh.org/success.html')
+            return redirect(error_url)
+        return redirect(success_url)
