@@ -1,16 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="icon" href="static/assets/img/favicons/favicon-32x32.png">
+    <link rel="icon" href="./static/assets/img/favicons/favicon-32x32.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="Upload your screenshots">
     <meta name="author" content="Cameron Craddock">
-    <link rel="stylesheet" href="/static/css/sticky-footer.css">
-    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
-
+    <link rel="stylesheet" href="./static/css/sticky-footer.css">
+    <link rel="stylesheet" href="./static/css/bootstrap.min.css">
     <title>Upload your digital selfie!</title>
-
 </head>
 
 <body>
@@ -18,77 +16,107 @@
     <main role="main" class="container">
         <div class="container">
             <div style="background:rgb(191,87,0) !important; color:white !important;" class="jumbotron">
-            <h1>Upload Your Digital Selfie</h1>
-		<p class="font-italic">Behavioral & Psychological Responses to the COVID-19 Pandemic: A SmartPhone Sensing Study</p>
+                <h1>Upload Your Digital Selfie</h1>
+                <p class="font-italic">Behavioral & Psychological Responses to the COVID-19 Pandemic: A SmartPhone Sensing Study</p>
             </div>
 
-        <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
-	    <input type="hidden" name="error_url" value="https://digitalselfie.ut-wcwh.org/upload_error.html">
-	    <input type="hidden" name="success_url" value="https://digitalselfie.ut-wcwh.org/success.html">
-            <div class="form-row form-group">
-                <input type="user-text-field" class="form-control" name="username" placeholder="Beiwe Username" autocomplete="username" required>
-            </div>
-            <div class="form-row form-group">
-	        <input id="password-text-field" type="password" class="form-control" name="password" placeholder="Beiwe Password" autocomplete="current-password" required>
-	    </div>
+            <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
+                <div id="callback" class="alert">
+                </div>
 
-            <div class="form-row form-group custom-file">
-                <input type="file" class="custom-file-input" id="customFile" name="user_files" multiple required>
-                <label class="custom-file-label pr-2" for="customFile">Choose file(s)</label>
-            </div>
+                <div class="form-row form-group">
+                    <input type="user-text-field" class="form-control" name="username" placeholder="Beiwe Username" autocomplete="username" required>
+                </div>
+                <div class="form-row form-group">
+                    <input id="password-text-field" type="password" class="form-control" name="password" placeholder="Beiwe Password" autocomplete="current-password" required>
+                </div>
 
-            <div class="form-row form-group">
-                <button type="submit" name="upload" value="upload" id="upload" class="btn btn-block btn-success float-right mt-3">Upload</button>
-            </div>
+                <div class="form-row form-group custom-file">
+                    <input type="file" class="custom-file-input" id="customFile" name="user_files" multiple required>
+                    <label class="custom-file-label pr-2" for="customFile">Choose file(s)</label>
+                </div>
 
+                <div class="form-row form-group">
+                    <button type="submit" name="upload" value="upload" id="upload" class="btn btn-block btn-success float-right mt-3">Upload</button>
+                </div>
+            </form>
 
-        </form>
-
-	<p class="mt-5">Please upload a "digital selfie" of your app usage by completing the following steps (or a <a href="https://drive.google.com/open?id=1BnJnmM-GDughAHlyJnaH58sY05_Vhs1jR0yviHeAR6o"> more detailed step-by-step guide).</a> If you have problems, please email <a href="mailto:utcovid19study@austin.utexas.edu">utcovid19study@austin.utexas.edu</a></p>
-        <h4>iPhone instructions:</h4>
-	<ol>
-		<li>Open your phone's "Settings" app.</li>
-		<li>Select "Screen Time."</li>
-		<li>Select "See All Activity."</li>
-		<li>Make sure you are toggled to view your usage for the week, NOT the day.</li>
-		<li>Take a screenshot(s) of your app usage for the past week by pressing and
-			holding the home and power buttons simultaneously. You may need to take multiple screenshots to
-			capture all the apps you used. </li>
-		<li>Enter your Beiwe username and password above. </li>
-		<li>Select the "Choose file" button above, select your screenshots, and select "Upload."</li>
-		<li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit. </li>
-	</ol>
+            <p class="mt-5">Please upload a "digital selfie" of your app usage by completing the following steps (or a <a href="https://drive.google.com/open?id=1BnJnmM-GDughAHlyJnaH58sY05_Vhs1jR0yviHeAR6o"> more detailed step-by-step guide).</a> If you have problems, please email <a href="mailto:utcovid19study@austin.utexas.edu">utcovid19study@austin.utexas.edu</a></p>
+            <h4>iPhone instructions:</h4>
+            <ol>
+                <li>Open your phone's "Settings" app.</li>
+                <li>Select "Screen Time."</li>
+                <li>Select "See All Activity."</li>
+                <li>Make sure you are toggled to view your usage for the week, NOT the day.</li>
+                <li>Take a screenshot(s) of your app usage for the past week by pressing and
+                    holding the home and power buttons simultaneously. You may need to take multiple screenshots to
+                    capture all the apps you used. </li>
+                <li>Enter your Beiwe username and password above. </li>
+                <li>Select the "Choose file" button above, select your screenshots, and select "Upload."</li>
+                <li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit. </li>
+            </ol>
  
-	<h4>Android instructions:</h4>
-	<ol>
-		<li>Open your phone's "Settings" app.</li>
-		<li>Select "Battery."</li>
-		<li>Select the 3-dot menu, and select to "Battery usage."</li>
-		<li>Select the 3 dot menu again, and choose "Show full device usage."</li>
-		<li>Take a screenshot(s) of your app usage for the past week by pressing and holding the volume and
-			power buttons simultaneously. You will need to take at least 7 screenshots: one for each day
-			of the past week.</li>
+            <h4>Android instructions:</h4>
+            <ol>
+                <li>Open your phone's "Settings" app.</li>
+                <li>Select "Battery."</li>
+                <li>Select the 3-dot menu, and select to "Battery usage."</li>
+                <li>Select the 3 dot menu again, and choose "Show full device usage."</li>
+                <li>Take a screenshot(s) of your app usage for the past week by pressing and holding the volume and
+                    power buttons simultaneously. You will need to take at least 7 screenshots: one for each day
+                    of the past week.</li>
                 <li>Enter your Beiwe username and password above. </li>
                 <li>Select the "Choose file" button above, select your screenshots, and select "Upload."</li>
                 <li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit.</li>
-	</ol>
-
+            </ol>
         </div>
     </main>
 
     <footer class="footer">
         <div class="container text-center">
-		<p class="font-italic">Copyright 2020, The University of Texas at Austin, <a href="https://bridgingbarriers.utexas.edu/whole-communities-whole-health/">Whole Communities Whole Health</p>
-	</div>
+            <p class="font-italic">Copyright 2020, The University of Texas at Austin, <a href="https://bridgingbarriers.utexas.edu/whole-communities-whole-health/">Whole Communities Whole Health</p>
+        </div>
     </footer>
 
-    <script src="/static/javascript/jquery-3.2.1.slim.min.js"></script>
-    <script src="/static/javascript/popper.js"></script>
-    <script src="/static/javascript/bootstrap.min.js"></script>
+    <script src="./static/javascript/jquery-3.5.0.min.js"></script>
+    <script src="./static/javascript/popper.js"></script>
+    <script src="./static/javascript/bootstrap.min.js"></script>
     <script type="text/javascript">
 
-        $('.custom-file input').change(function (e) {
-		$(this).next('.custom-file-label').html(`${e.target.files.length} file(s)`);
+        $(document).ready(function () {
+            $('.custom-file input').change(function (e) {
+                $(this).next('.custom-file-label').html(`${e.target.files.length} file(s)`);
+            });
+            $('form').submit(function (e) {
+                e.preventDefault();
+
+                $('#callback')
+                    .removeClass('alert-danger alert-success')
+                    .html('');
+
+                var data = new FormData(this);
+                $.ajax({
+                    url: this.action,
+                    data: data,
+                    processData: false,
+                    contentType: false,
+                    type: 'POST',
+                    success: function(response){
+                        $('#callback')
+                            .addClass('alert-success')
+                            .html('Digital selfie upload completed successfully!');
+                    },
+                    error: function (xhr, ajaxOptions, thrownError) {
+                        var message = 'Digital selfie upload failed to load! Please try again.';
+                        if (xhr.status === 401)
+                            message = 'Please, check your Beiwe username and password.';
+
+                        $('#callback')
+                            .addClass('alert-danger')
+                            .html(message);
+                    }
+                });
+            });
         });
 
     </script>
