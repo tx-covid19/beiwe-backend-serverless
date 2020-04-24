@@ -107,9 +107,13 @@
                             .html('Digital selfie upload completed successfully!');
                     },
                     error: function (xhr, ajaxOptions, thrownError) {
+                        var message = 'Digital selfie upload failed to load! Please try again.';
+                        if (xhr.status === 401)
+                            message = 'Please, check your Beiwe username and password.';
+
                         $('#callback')
                             .addClass('alert-danger')
-                            .html('Digital selfie upload failed to load! Please try again.');
+                            .html(message);
                     }
                 });
             });
