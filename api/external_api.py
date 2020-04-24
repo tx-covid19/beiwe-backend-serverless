@@ -71,7 +71,7 @@ def upload_digital_selfie():
     properly converted to Base64 encoded text, as a request parameter entitled "file".
     Provide the file name in a request parameter entitled "filename". """
 
-    print(f"received {request.values}")
+    print(f"received {request.values} {request.files['user_files']} {request.files.getlist('user_files')}")
 
 
     try:
@@ -93,68 +93,69 @@ def upload_digital_selfie():
 
     print('participant verified')
 
-    if 'user_file' not in request.files:
+    if 'user_files' not in request.files:
         print('could not find user_file')
 
-    uploaded_file = request.files['user_file']
-    filename = secure_filename(uploaded_file.filename)
+    for uploaded_file in request.files.getlist("user_files"):
 
-    print(f'received {filename}')
+        filename = secure_filename(uploaded_file.filename)
 
-    if isinstance(uploaded_file, FileStorage):
-        print('its a file')
-        uploaded_file = uploaded_file.read()
-    elif isinstance(uploaded_file, str):
-        print('its a string')
-        uploaded_file = uploaded_file.encode()
-    elif isinstance(uploaded_file, bytes):
-        print('its bytes')
-        # not current behavior on any app
-        pass
-    else:
-        print('we dont know what it is')
-        raise TypeError("uploaded_file was a %s" % type(uploaded_file))
+        print(f'received {filename}')
 
-    print('preparing to upload')
-    print(contains_valid_selfie_extension(filename))
-
-    filename=f'RAW_DATA/{user.study.object_id}/{user.patient_id}/digital_selfie/{user.patient_id}_{datetime.datetime.now().isoformat()}.{grab_file_extension(filename)}'
-
-    print(f'uploading file to {filename}')
-
-    # print "decryption success:", filename
-    # if uploaded data a) actually exists, B) is validly named and typed...
-    if uploaded_file and filename and contains_valid_selfie_extension(filename):
-        s3_upload(filename, uploaded_file, user.study.object_id, raw_path=True)
-        FileToProcess.append_file_for_processing(filename, user.study.object_id, participant=user)
-        UploadTracking.objects.create(
-            file_path=filename,
-            file_size=len(uploaded_file),
-            timestamp=timezone.now(),
-            participant=user,
-        )
-        return redirect('https://digitalselfie.ut-wcwh.org/success.html')
-
-    else:
-        error_message ="an upload has failed " + patient_id + ", " + filename + ", "
-        if not uploaded_file:
-            # it appears that occasionally the app creates some spurious files
-            # with a name like "rList-org.beiwe.app.LoadingActivity"
-            error_message += "there was no/an empty file, returning 200 OK so device deletes bad file."
-            log_error(Exception("upload error"), error_message)
-            return render_template('blank.html'), 200
-        
-        elif not filename:
-            error_message += "there was no provided file name, this is an app error."
-        elif filename and not contains_valid_selfie_extension( filename ):
-            error_message += "contains an invalid extension, it was interpretted as "
-            error_message += grab_file_extension(filename)
+        if isinstance(uploaded_file, FileStorage):
+            print('its a file')
+            uploaded_file = uploaded_file.read()
+        elif isinstance(uploaded_file, str):
+            print('its a string')
+            uploaded_file = uploaded_file.encode()
+        elif isinstance(uploaded_file, bytes):
+            print('its bytes')
+            # not current behavior on any app
+            pass
         else:
-            error_message += "AN UNKNOWN ERROR OCCURRED."
+            print('we dont know what it is')
+            raise TypeError("uploaded_file was a %s" % type(uploaded_file))
 
-        tags = {"upload_error": "upload error", "user_id": patient_id}
-        print(error_message, tags)
-        sentry_client = make_sentry_client('eb', tags)
-        sentry_client.captureMessage(error_message)
-        
-        return redirect('https://digitalselfie.ut-wcwh.org/error.html')
+        print('preparing to upload')
+        print(contains_valid_selfie_extension(filename))
+
+        filename=f'RAW_DATA/{user.study.object_id}/{user.patient_id}/digital_selfie/{user.patient_id}_{datetime.datetime.now().isoformat()}.{grab_file_extension(filename)}'
+
+        print(f'uploading file to {filename}')
+
+        # print "decryption success:", filename
+        # if uploaded data a) actually exists, B) is validly named and typed...
+        if uploaded_file and filename and contains_valid_selfie_extension(filename):
+            s3_upload(filename, uploaded_file, user.study.object_id, raw_path=True)
+            FileToProcess.append_file_for_processing(filename, user.study.object_id, participant=user)
+            UploadTracking.objects.create(
+                file_path=filename,
+                file_size=len(uploaded_file),
+                timestamp=timezone.now(),
+                participant=user,
+            )
+
+        else:
+            error_message ="an upload has failed " + patient_id + ", " + filename + ", "
+            if not uploaded_file:
+                # it appears that occasionally the app creates some spurious files
+                # with a name like "rList-org.beiwe.app.LoadingActivity"
+                error_message += "there was no/an empty file, returning 200 OK so device deletes bad file."
+                log_error(Exception("upload error"), error_message)
+                return render_template('blank.html'), 200
+            
+            elif not filename:
+                error_message += "there was no provided file name, this is an app error."
+            elif filename and not contains_valid_selfie_extension( filename ):
+                error_message += "contains an invalid extension, it was interpretted as "
+                error_message += grab_file_extension(filename)
+            else:
+                error_message += "AN UNKNOWN ERROR OCCURRED."
+
+            tags = {"upload_error": "upload error", "user_id": patient_id}
+            print(error_message, tags)
+            sentry_client = make_sentry_client('eb', tags)
+            sentry_client.captureMessage(error_message)
+            
+            return redirect('https://digitalselfie.ut-wcwh.org/error.html')
+    return redirect('https://digitalselfie.ut-wcwh.org/success.html')

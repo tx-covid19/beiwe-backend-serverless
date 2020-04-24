@@ -1,40 +1,96 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <link rel="icon" href="static/assets/img/favicons/favicon-32x32.png">
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Upload your screenshots">
+    <meta name="author" content="Cameron Craddock">
+    <link rel="stylesheet" href="/static/css/sticky-footer.css">
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+
     <title>Upload your digital selfie!</title>
+
 </head>
-<style>
-.error {
-  padding: 8px;
-  background-color: red;
-  color: white;
-}
-</style>
 
 <body>
 
-	<div class="content">
-    <h1>Upload your digital selfie</h1>
+    <main role="main" class="container">
+        <div class="container">
+            <div class="jumbotron">
+            <h1>Upload Your Digital Selfie</h1>
+		<p class="font-italic text-muted">Behavioral & Psychological Responses to the COVID-19 Pandemic:<br>
+			A SmartPhone Sensing Study</p>
+            </div>
 
-    <p>Please upload a screenshot of your mobile phone's screen time usage for the past week.</p>
+        <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
+            <div class="form-row form-group">
+                <input type="email" class="form-control" name="beiwe_username" placeholder="Beiwe Username" autocomplete="username">
+            </div>
+            <div class="form-row form-group">
+	        <input id="password-text-field" type="password" class="form-control" name="beiwe_password" placeholder="Beiwe Password" autocomplete="current-password">
+	    </div>
 
-    <p>Instructions for taking a digital selfie.</p>
+            <div class="form-row form-group custom-file">
+                <input type="file" class="custom-file-input" id="customFile" name="user_files" multiple>
+                <label class="custom-file-label pr-2" for="customFile">Choose file(s)</label>
+            </div>
 
-    <form action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
+            <div class="form-row form-group">
+                <button type="submit" name="upload" value="upload" id="upload" class="btn btn-block btn-success float-right mt-3">Upload</button>
+            </div>
+        </form>
 
-	<label for="beiwe_username">Beiwe username:</label><br>
-        <input type="text" id="username" name="beiwe_username"><br>
-        <label for="beiwe_password">Beiwe password:</label><br>
-	<input type="text" id="password" name="beiwe_password"><br><br><br>
-	<label for="user_file">Upload Your File</label><br>
-        <br></br>
-        <input type="file" name="user_file">
-        <br></br>
-        <button type="submit">Upload</button>
-    </form>
+	<p class="mt-5">Please upload a "digital selfie" of your app usage by completing the following steps (or a <a href="https://drive.google.com/open?id=1BnJnmM-GDughAHlyJnaH58sY05_Vhs1jR0yviHeAR6o"> more detailed step-by-step guide).</a> If you have problems, please email <a href="mailto:utcovid19study@austin.utexas.edu">utcovid19study@austin.utexas.edu</a></p>
+        <h4>iPhone instructions:</h4>
+	<ol>
+		<li>Open your phone's "Settings" app.</li>
+		<li>Select "Screen Time."</li>
+		<li>Select "See All Activity."</li>
+		<li>Make sure you are toggled to view your usage for the week, NOT the day.</li>
+		<li>Take a screenshot(s) of your app usage for the past week by pressing and
+			holding the home and power buttons simultaneously. You may need to take multiple screenshots to
+			capture all the apps you used. </li>
+		<li>Enter your Beiwe username and password above. </li>
+		<li>Select the "Choose file" button above, select a screenshot, and select "Upload."</li>
+		<li>Repeat this process to upload all of your screenshots.</li>
+		<li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit. </li>
+	</ol>
+ 
+	<h4>Android instructions:</h4>
+	<ol>
+		<li>Open your phone's "Settings" app.</li>
+		<li>Select "Battery."</li>
+		<li>Select the 3-dot menu, and select to "Battery usage."</li>
+		<li>Select the 3 dot menu again, and choose "Show full device usage."</li>
+		<li>Take a screenshot(s) of your app usage for the past week by pressing and holding the volume and
+			power buttons simultaneously. You will need to take at least 7 screenshots: one for each day
+			of the past week.</li>
+                <li>Enter your Beiwe username and password above. </li>
+                <li>Select the "Choose file" button above, select your screenshots, and select "Upload."</li>
+                <li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit.</li>
+	</ol>
 
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container text-center">
+		<p class="font-italic text-muted">Copyright 2020, Cameron Craddock and project contributors.</p>
 	</div>
+    </footer>
+
+    <script src="/static/javascript/jquery-3.2.1.slim.min.js"></script>
+    <script src="/static/javascript/popper.js"></script>
+    <script src="/static/javascript/bootstrap.min.js"></script>
+    <script type="text/javascript">
+
+        $('.custom-file input').change(function (e) {
+		$(this).next('.custom-file-label').html(`${e.target.files.length} file(s)`);
+        });
+
+    </script>
+
 </body>
 
 </html>
