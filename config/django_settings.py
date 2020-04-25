@@ -57,8 +57,8 @@ elif os.environ['DJANGO_DB_ENV'] == "remote":
     }
 else:
     from django.core.exceptions import ImproperlyConfigured
-
     raise ImproperlyConfigured("server not running as expected, could not find environment variable DJANGO_DB_ENV")
+
 
 TIME_ZONE = 'UTC'
 USE_TZ = True
