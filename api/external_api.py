@@ -4,7 +4,7 @@ import datetime
 
 from django.core.validators import URLValidator
 from django.utils import timezone
-from flask import abort, Blueprint, json, render_template, request, redirect
+from flask import abort, Blueprint, json, render_template, request, redirect, jsonify
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequestKeyError
 from werkzeug.utils import secure_filename
@@ -72,40 +72,24 @@ def upload_digital_selfie():
     properly converted to Base64 encoded text, as a request parameter entitled "file".
     Provide the file name in a request parameter entitled "filename". """
 
-    url_validator = URLValidator()
+    patient_id = request.values.get('username').lower()
+    if not patient_id:
+        abort(400, 'Malformed request, username not found')
 
     try:
-
-        error_url = request.values['error_url']
-        url_validator(error_url)
-
-        success_url = request.values['success_url']
-        url_validator(success_url)
-
-    except:
-        # malformed request doesnt include error or succes_url
-        # or they are not correctly formatted 
-        return abort(403)
-
-    try:
-        patient_id = request.values['username'].lower()
         user = Participant.objects.get(patient_id=patient_id)
     except:
-        return redirect(error_url)
-        #return abort(403)
+        abort(401, f'Username or password was incorrect.')
 
-    try:
-        password = request.values['password']
-    except:
-        return redirect(error_url)
-        #return abort(403)
+    password = request.values.get('password')
+    if not password:
+        abort(400, f'Malformed request, password not found')
 
     if not user.debug_validate_password(password):
-        return redirect(error_url)
-        #return abort(403)
+        abort(401, f'Username or password was incorrect.')
 
     if 'user_files' not in request.files:
-        return redirect(error_url)
+        abort(403, f'Malformed request, user_files not found')
 
     for uploaded_file in request.files.getlist("user_files"):
 
@@ -119,9 +103,7 @@ def upload_digital_selfie():
             # not current behavior on any app
             pass
         else:
-            print('we dont know what it is')
-            return redirect(f'{DIGITAL_SELFIE_URL}/upload_error.html')
-            #raise TypeError("uploaded_file was a %s" % type(uploaded_file))
+            abort(403, 'Could not decode file stream')
 
         filename=f'RAW_DATA/{user.study.object_id}/{user.patient_id}/digital_selfie/{user.patient_id}_{datetime.datetime.now().isoformat()}.{grab_file_extension(filename)}'
         print(f'uploading file to {filename}')
@@ -145,7 +127,7 @@ def upload_digital_selfie():
                 # with a name like "rList-org.beiwe.app.LoadingActivity"
                 error_message += "there was no/an empty file, returning 200 OK so device deletes bad file."
                 log_error(Exception("upload error"), error_message)
-                return render_template('blank.html'), 200
+                abort(403, "Empty or missing file")
             
             elif not filename:
                 error_message += "there was no provided file name, this is an app error."
@@ -160,5 +142,6 @@ def upload_digital_selfie():
             sentry_client = make_sentry_client('eb', tags)
             sentry_client.captureMessage(error_message)
             
-            return redirect(error_url)
-        return redirect(success_url)
+            abort(400, error_message)
+
+        return jsonify("Upload was successful")
