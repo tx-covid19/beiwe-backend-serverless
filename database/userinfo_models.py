@@ -21,7 +21,3 @@ class ParticipantInfo(models.Model):
 
     # Pytz compatible
     timezone = models.CharField(max_length=100)
-
-    # RedCap record
-    record_id = models.CharField(max_length=50, unique=True)
-    queue_url = models.CharField(max_length=200)

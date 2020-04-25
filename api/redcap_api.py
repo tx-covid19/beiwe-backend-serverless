@@ -1,41 +1,54 @@
 import redcap
-import requests
 from flask import Blueprint, request, jsonify
 
-from database.user_models import Participant
-from database.userinfo_models import ParticipantInfo
+from config.settings import REDCAP_SERVER_URL, REDCAP_API_TOKEN
+from database.redcap_models import RedcapRecord
+from database.user_models import Participant, StudyRelation
+from database.user_models import Researcher
 
 redcap_api = Blueprint('redcap_api', __name__)
 
-SERVER_URL = ''
-API_TOKEN = ''
+EXPECTED_INSTRUMENT_NAME = 'online_consent_form'
 
 
-@redcap_api.route('/user/redcap/ZbeVRwRDvFQvVkWTybnC2AnG3ZR2w5', methods=['POST'])
+@redcap_api.route('/user/redcap', methods=['POST'])
 def redcap_handler():
-    # unsupported in PyCap
-    def survey_queue_link(record_id: str):
-        r = requests.post(SERVER_URL, data={
-            'token': API_TOKEN,
-            'content': 'surveyQueueLink',
-            'format': 'json',
-            'record': record_id,
-        })
-        if r.status_code == 200:
-            return r.text
-        else:
-            return ''
+    instrument = request.form.get('instrument', '')
+    instrument_completed = request.form.get(EXPECTED_INSTRUMENT_NAME + '_complete', '')
+    event_user = request.form.get('username', '')
+
+    if instrument != EXPECTED_INSTRUMENT_NAME or instrument_completed != '2' or event_user != '[survey respondent]':
+        return jsonify({'msg': 'Request ignored.'}), 200
+
+    study_id = request.args.get('study_id', '')
+    access_key = request.args.get('access_key', '')
+    access_secret = request.args.get('access_secret', '')
+
+    if not study_id:
+        return jsonify({'msg': 'No study ID supplied.'}), 400
+
+    try:
+        researcher = Researcher.objects.get(access_key_id=access_key)
+    except Researcher.DoesNotExist:
+        return jsonify({'msg': 'No access.'}), 403
+
+    if not StudyRelation.objects.filter(study_id=study_id, researcher=researcher).exists():
+        return jsonify({'msg': 'Not authorized for this study.'}), 403
+
+    if not researcher.validate_access_credentials(access_secret):
+        return jsonify({'msg': 'Wrong secrets.'}), 403
 
     record_id = request.form.get('record', '')
+
     if not record_id:
         return jsonify({'msg': 'Missing record information'}), 400
 
-    if ParticipantInfo.objects.filter(record_id__exact=record_id).exists():
+    if RedcapRecord.objects.filter(record_id__exact=record_id).exists():
         return jsonify({'msg': 'User exists'}), 304
 
     # create beiwe user and write credentials back to Redcap
     try:
-        project = redcap.Project(SERVER_URL, API_TOKEN)
+        project = redcap.Project(REDCAP_SERVER_URL, REDCAP_API_TOKEN)
         records = project.export_records(records=[record_id])
 
         if not records:
@@ -44,13 +57,9 @@ def redcap_handler():
         record = records[0]
 
         # Create user
-        patient_id, password = Participant.create_with_password(study_id=1)
+        patient_id, password = Participant.create_with_password(study_id=study_id)
         patient = Participant.objects.get(patient_id__exact=patient_id)
-
-        url = survey_queue_link(record_id)
-        # TODO fill in such information
-        ParticipantInfo(user=patient, country='United States', zipcode='78731', timezone='UTC',
-                        record_id=record_id, queue_url=url).save()
+        RedcapRecord(user=patient, record_id=record_id).save()
 
         # Upload data back
         record['beiwe_username'] = patient_id
