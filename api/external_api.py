@@ -16,6 +16,7 @@ from database.user_models import Participant, Researcher, StudyRelation
 from database.study_models import Study
 from libs.encryption import decrypt_device_file, DecryptionKeyInvalidError, HandledError
 from libs.http_utils import determine_os_api
+from libs.cors import crossdomain
 from libs.logging import log_error
 from libs.s3 import get_client_private_key, get_client_public_key_string, s3_upload
 from libs.sentry import make_sentry_client
@@ -51,7 +52,8 @@ def contains_valid_selfie_extension(filename):
 #                     headers={'Content-Disposition':'attachment; filename="loaderio-8ed6e63e16e9e4d07d60a051c4ca6ecb.txt"'})
 
 
-@external_api.route('/upload_digital_selfie', methods=['POST'])
+@external_api.route('/upload_digital_selfie', methods=['POST', 'OPTIONS'])
+@crossdomain(origin='*') 
 def upload_digital_selfie():
     """ Entry point to upload GPS, Accelerometer, Audio, PowerState, Calls Log, Texts Log,
     Survey Response, and debugging files to s3.
