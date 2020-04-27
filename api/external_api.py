@@ -5,6 +5,7 @@ import datetime
 from django.core.validators import URLValidator
 from django.utils import timezone
 from flask import abort, Blueprint, json, render_template, request, redirect, jsonify
+from flask_cors import cross_origin
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequestKeyError
 from werkzeug.utils import secure_filename
@@ -16,13 +17,13 @@ from database.user_models import Participant, Researcher, StudyRelation
 from database.study_models import Study
 from libs.encryption import decrypt_device_file, DecryptionKeyInvalidError, HandledError
 from libs.http_utils import determine_os_api
-from libs.cors import crossdomain
 from libs.logging import log_error
 from libs.s3 import get_client_private_key, get_client_public_key_string, s3_upload
 from libs.sentry import make_sentry_client
 from libs.user_authentication import (authenticate_user, authenticate_user_registration, minimal_validation)
 
 from database.study_models import ParticipantSurvey
+
 
 ################################################################################
 ############################# GLOBALS... #######################################
@@ -53,7 +54,7 @@ def contains_valid_selfie_extension(filename):
 
 
 @external_api.route('/upload_digital_selfie', methods=['POST', 'OPTIONS'])
-@crossdomain(origin='*') 
+@cross_origin(origins=['http://127.0.0.1:5000', 'https://digitalselfie.ut-wcwh.org']) 
 def upload_digital_selfie():
     """ Entry point to upload GPS, Accelerometer, Audio, PowerState, Calls Log, Texts Log,
     Survey Response, and debugging files to s3.
@@ -76,22 +77,22 @@ def upload_digital_selfie():
 
     patient_id = request.values.get('username').lower()
     if not patient_id:
-        abort(400, 'Malformed request, username not found')
+        return jsonify('Malformed request, username not found'), 400
 
     try:
         user = Participant.objects.get(patient_id=patient_id)
     except:
-        abort(401, f'Username or password was incorrect.')
+        return jsonify('Username or password incorrect'), 401
 
     password = request.values.get('password')
     if not password:
-        abort(400, f'Malformed request, password not found')
+        return jsonify('Malformed request, password not found'), 400
 
     if not user.debug_validate_password(password):
-        abort(401, f'Username or password was incorrect.')
+        return jsonify('Username or password incorrect'), 401
 
     if 'user_files' not in request.files:
-        abort(403, f'Malformed request, user_files not found')
+        return jsonify('Malformed request, user_files not found'), 403
 
     for uploaded_file in request.files.getlist("user_files"):
 
@@ -105,12 +106,12 @@ def upload_digital_selfie():
             # not current behavior on any app
             pass
         else:
-            abort(403, 'Could not decode file stream')
+            return jsonify('Malformed request, user_files not found'), 403
 
         filename=f'RAW_DATA/{user.study.object_id}/{user.patient_id}/digital_selfie/{user.patient_id}_{datetime.datetime.now().isoformat()}.{grab_file_extension(filename)}'
+
         print(f'uploading file to {filename}')
 
-        # print "decryption success:", filename
         # if uploaded data a) actually exists, B) is validly named and typed...
         if uploaded_file and filename and contains_valid_selfie_extension(filename):
             s3_upload(filename, uploaded_file, user.study.object_id, raw_path=True)
@@ -129,7 +130,7 @@ def upload_digital_selfie():
                 # with a name like "rList-org.beiwe.app.LoadingActivity"
                 error_message += "there was no/an empty file, returning 200 OK so device deletes bad file."
                 log_error(Exception("upload error"), error_message)
-                abort(403, "Empty or missing file")
+                return jsonify('Empty or missing file'), 403
             
             elif not filename:
                 error_message += "there was no provided file name, this is an app error."
@@ -144,6 +145,6 @@ def upload_digital_selfie():
             sentry_client = make_sentry_client('eb', tags)
             sentry_client.captureMessage(error_message)
             
-            abort(400, error_message)
+            return jsonify(error_message), 500
 
-        return jsonify("Upload was successful")
+        return jsonify("Upload was successful"), 200
