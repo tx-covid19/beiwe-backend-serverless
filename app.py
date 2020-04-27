@@ -23,6 +23,8 @@ def subdomain(directory):
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
     app.jinja_loader = jinja2.ChoiceLoader(loader)
     app.wsgi_app = ProxyFix(app.wsgi_app)
+
+    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
     return app
 
 

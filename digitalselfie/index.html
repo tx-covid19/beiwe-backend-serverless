@@ -100,8 +100,10 @@
 		for (index = 0; index < e.target.files.length; index++) {
                     total_file_size += e.target.files[index].size / 1024 / 1024;
                 }
+		    $(this).next('.custom-file-label').removeClass('alert-danger alert-success').html('');
+
 		    if(total_file_size > 5) {
-			    $(this).next('.custom-file-label').addClass('alert-danger').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB > 5MB`);
+		        $(this).next('.custom-file-label').addClass('alert-danger').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB > 5MB`);
 		    } else {
 		        $(this).next('.custom-file-label').addClass('alert-success').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB`);
 		    }
@@ -135,7 +137,12 @@
                                 .html('Digital selfie upload completed successfully!');
                         },
                         error: function (xhr, ajaxOptions, thrownError) {
-			     var message = 'Digital selfie upload failed to load! ' + JSON.parse(xhr.responseText);
+	                     console.log(xhr.responseText);
+			     var message = 'Digital selfie upload failed to load! '
+	                     if (xhr.responseText){
+	                         message += JSON.parse(xhr.responseText);
+	                     }
+	                     console.log(message)
     
                             $('#callback')
                                 .addClass('alert-danger')
