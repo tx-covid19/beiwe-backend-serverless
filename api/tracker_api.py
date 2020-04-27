@@ -9,7 +9,7 @@ from database.user_models import Participant
 tracker_api = Blueprint('tracker_api', __name__)
 
 
-@tracker_api.route('/user/tracker', methods=['GET', 'POST'])
+@tracker_api.route('/tracker', methods=['GET', 'POST'])
 @jwt_required
 def tracker_handler():
     patient_id = get_jwt_identity()
