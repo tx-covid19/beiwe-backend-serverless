@@ -11,7 +11,7 @@ redcap_api = Blueprint('redcap_api', __name__)
 EXPECTED_INSTRUMENT_NAME = 'online_consent_form'
 
 
-@redcap_api.route('/user/redcap', methods=['POST'])
+@redcap_api.route('/handler', methods=['POST'])
 def redcap_handler():
     instrument = request.form.get('instrument', '')
     instrument_completed = request.form.get(EXPECTED_INSTRUMENT_NAME + '_complete', '')

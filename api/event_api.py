@@ -9,7 +9,7 @@ from database.user_models import Participant
 event_api = Blueprint('event_api', __name__)
 
 
-@event_api.route('/user/event', methods=['POST'])
+@event_api.route('/event', methods=['POST'])
 @jwt_required
 def event_handler():
     patient_id = get_jwt_identity()

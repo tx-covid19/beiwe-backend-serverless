@@ -23,7 +23,7 @@ def authenticate_researcher(func):
             return jsonify({'msg': 'No access.'}), 403
 
         if not researcher.validate_access_credentials(access_secret):
-            return jsonify({'msg': 'Wrong secrets.'}), 403
+            return jsonify({'msg': 'No access.'}), 403
 
         return func(*args, **kwargs)
 
@@ -40,14 +40,14 @@ def map_save(func):
     return count, len(info_set)
 
 
-@refresh_api.route('/refresh/weather', methods=['POST'])
+@refresh_api.route('/weather', methods=['POST'])
 @authenticate_researcher
 def refresh_weather():
     count, total = map_save(save_weather)
     return jsonify({'msg': f'{count}/{total} updated.'}), 200
 
 
-@refresh_api.route('/refresh/pollen', methods=['POST'])
+@refresh_api.route('/pollen', methods=['POST'])
 @authenticate_researcher
 def refresh_pollen():
     count, total = map_save(save_pollen)
@@ -79,7 +79,7 @@ def refresh_pollen():
 #     return jsonify({'msg': f'{count}/{len(info_list)} updated.'}), 200
 
 
-@refresh_api.route('/refresh/covid', methods=['POST'])
+@refresh_api.route('/covid', methods=['POST'])
 @authenticate_researcher
 def refresh_covid():
     info_list = list(ParticipantInfo.objects.values('country', 'zipcode').distinct())

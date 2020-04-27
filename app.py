@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import jinja2
 from flask import Flask, redirect, render_template
@@ -11,7 +11,7 @@ from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
     mobile_api, participant_administration, survey_api, participant_auth, event_api, overview_api,
-                 tracker_api, refresh_api, redcap_api)
+                 tracker_api, refresh_api, redcap_api, fitbit_auth_api)
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
@@ -23,6 +23,8 @@ def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static")
     set_secret_key(app)
     app.config['JWT_SECRET_KEY'] = app.secret_key
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=5)
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)
     jwt = JWTManager(app)
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
     app.jinja_loader = jinja2.ChoiceLoader(loader)
@@ -46,12 +48,13 @@ app.register_blueprint(data_access_web_form.data_access_web_form)
 app.register_blueprint(copy_study_api.copy_study_api)
 app.register_blueprint(data_pipeline_api.data_pipeline_api)
 app.register_blueprint(dashboard_api.dashboard_api)
-app.register_blueprint(participant_auth.participant_auth)
-app.register_blueprint(event_api.event_api)
-app.register_blueprint(overview_api.overview_api)
-app.register_blueprint(tracker_api.tracker_api)
-app.register_blueprint(refresh_api.refresh_api)
-app.register_blueprint(redcap_api.redcap_api)
+app.register_blueprint(participant_auth.participant_auth, url_prefix='/user')
+app.register_blueprint(event_api.event_api, url_prefix='/user')
+app.register_blueprint(overview_api.overview_api, url_prefix='/user')
+app.register_blueprint(tracker_api.tracker_api, url_prefix='/user')
+app.register_blueprint(refresh_api.refresh_api, url_prefix='/refresh')
+app.register_blueprint(redcap_api.redcap_api, url_prefix='/redcap')
+app.register_blueprint(fitbit_auth_api.fitbit_auth_api, url_prefix='/fitbit')
 
 
 # Don't set up Sentry for local development
