@@ -36,6 +36,13 @@
                     <label class="custom-file-label pr-2" for="customFile">Choose file(s)</label>
                 </div>
 
+		<div class="form-row form-group ml-5 mt-2 mb-0" id="form-check">
+                    <input type="checkbox" class="form-check-input" value="1" id="rr-1" name="rr[]" required>
+                    <label class="form-check-label" for="rr-1">I have verified that these images contain only screen shots of my mobile
+			    phone App usage that have been edited to remove any personally identifying information. The images do not
+			    include any other content, specifically nothing of an offensive nature.</label>
+                </div>
+
                 <div class="form-row form-group">
                     <button type="submit" name="upload" value="upload" id="upload" class="btn btn-block btn-success float-right mt-3">Upload</button>
                 </div>
@@ -49,10 +56,14 @@
                 <li>Select "See All Activity."</li>
                 <li>Make sure you are toggled to view your usage for the week, NOT the day.</li>
                 <li>Take a screenshot(s) of your app usage for the past week by pressing and
-                    holding the home and power buttons simultaneously. You may need to take multiple screenshots to
-                    capture all the apps you used. </li>
+                    holding the home and power buttons simultaneously. Please crop the screenshot
+		    to remove your device's name (e.g. Richard's iPhone) from the top of the image. 
+		    You may need to take multiple screenshots to capture all the apps you used. </li>
                 <li>Enter your Beiwe username and password above. </li>
-                <li>Select the "Choose file" button above, select your screenshots, and select "Upload."</li>
+                <li>Select the "Choose file" button above and select your screenshots. Check the box
+		    confirming that you are uploading app usage screenshots that have been cropped 
+		    to remove personally identifying information and not anything of an offensive 
+		    nature. Select "Upload."</li>
                 <li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit. </li>
             </ol>
  
@@ -85,7 +96,16 @@
 
         $(document).ready(function () {
             $('.custom-file input').change(function (e) {
-                $(this).next('.custom-file-label').html(`${e.target.files.length} file(s)`);
+		let total_file_size = 0;
+		for (index = 0; index < e.target.files.length; index++) {
+                    total_file_size += e.target.files[index].size / 1024 / 1024;
+                }
+		    if(total_file_size > 5) {
+			    $(this).next('.custom-file-label').addClass('alert-danger').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB > 5MB`);
+		    } else {
+		        $(this).next('.custom-file-label').addClass('alert-success').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB`);
+		    }
+
             });
             $('form').submit(function (e) {
                 e.preventDefault();
@@ -95,27 +115,38 @@
                     .html('');
 
                 var data = new FormData(this);
-                $.ajax({
-                    url: this.action,
-                    data: data,
-                    processData: false,
-                    contentType: false,
-                    type: 'POST',
-                    success: function(response){
-                        $('#callback')
-                            .addClass('alert-success')
-                            .html('Digital selfie upload completed successfully!');
-                    },
-                    error: function (xhr, ajaxOptions, thrownError) {
-                        var message = 'Digital selfie upload failed to load! Please try again.';
-                        if (xhr.status === 401)
-                            message = 'Please, check your Beiwe username and password.';
+		let total_file_size = 0;
 
-                        $('#callback')
-                            .addClass('alert-danger')
-                            .html(message);
-                    }
-                });
+		all_files = data.getAll("user_files")
+		for (index = 0; index < all_files.length; index++) {
+                    total_file_size += all_files[index].size / 1024 / 1024;
+                }
+		if (total_file_size < 5) {
+		    console.log(`Uploading ${total_file_size} MB in ${all_files.length} files`);
+                    $.ajax({
+                        url: this.action,
+                        data: data,
+                        processData: false,
+                        contentType: false,
+                        type: 'POST',
+                        success: function(response){
+                            $('#callback')
+                                .addClass('alert-success')
+                                .html('Digital selfie upload completed successfully!');
+                        },
+                        error: function (xhr, ajaxOptions, thrownError) {
+			     var message = 'Digital selfie upload failed to load! ' + JSON.parse(xhr.responseText);
+    
+                            $('#callback')
+                                .addClass('alert-danger')
+                                .html(message);
+                        }
+                    });
+		} else {
+		    $('#callback')
+			.addClass('alert-danger')
+				.html('Total size of selected files(s) is larger than 5MB upload limit.');
+		}
             });
         });
 

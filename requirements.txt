@@ -25,3 +25,7 @@ boxsdk
 
 # redcap
 PyCap
+
+# cors
+flask-cors
+
