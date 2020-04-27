@@ -42,3 +42,7 @@ DOWNLOADABLE_APK_URL = getenv("DOWNLOADABLE_APK_URL", "https://s3.amazonaws.com/
 # Redcap credentials
 REDCAP_SERVER_URL = getenv('REDCAP_SERVER_URL')
 REDCAP_API_TOKEN = getenv('REDCAP_API_TOKEN')
+
+# Fitbit credentials
+FITBIT_CLIENT_ID = getenv('FITBIT_CLIENT_ID')
+FITBIT_CLIENT_SECRET = getenv('FITBIT_CLIENT_SECRET')
