@@ -1,6 +1,6 @@
 from django.db import models
 
-from database.user_models import Participant
+from .user_models import Participant
 
 
 class FitbitRecord(models.Model):
