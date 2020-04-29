@@ -20,8 +20,15 @@
                 <p class="font-italic">Behavioral & Psychological Responses to the COVID-19 Pandemic: A SmartPhone Sensing Study</p>
             </div>
 
-            <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="https://beiwe-py3.ut-wcwh.org/upload_digital_selfie" method="POST" enctype="multipart/form-data">
-                <div id="callback" class="alert">
+
+    	    <iframe src="dummy.html" name="dummy" style="display: none"></iframe>
+
+            <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="" target="dummy" method="POST" enctype="multipart/form-data">
+                <div class="form-row">
+                    <p >Please upload a "digital selfie" of your app usage by completing the steps at the bottom of this page (or a <a href="https://drive.google.com/open?id=1BnJnmM-GDughAHlyJnaH58sY05_Vhs1jR0yviHeAR6o"> more detailed step-by-step guide).</a> If you have problems, please email <a href="mailto:utcovid19study@austin.utexas.edu">utcovid19study@austin.utexas.edu</a></p>
+		</div>
+
+                <div id="callback" class="form-row alert">
                 </div>
 
                 <div class="form-row form-group">
@@ -48,7 +55,6 @@
                 </div>
             </form>
 
-            <p class="mt-5">Please upload a "digital selfie" of your app usage by completing the following steps (or a <a href="https://drive.google.com/open?id=1BnJnmM-GDughAHlyJnaH58sY05_Vhs1jR0yviHeAR6o"> more detailed step-by-step guide).</a> If you have problems, please email <a href="mailto:utcovid19study@austin.utexas.edu">utcovid19study@austin.utexas.edu</a></p>
             <h4>iPhone instructions:</h4>
             <ol>
                 <li>Open your phone's "Settings" app.</li>
@@ -59,26 +65,42 @@
                     holding the home and power buttons simultaneously. Please crop the screenshot
 		    to remove your device's name (e.g. Richard's iPhone) from the top of the image. 
 		    You may need to take multiple screenshots to capture all the apps you used. </li>
-                <li>Enter your Beiwe username and password above. </li>
+                <li>Enter your Beiwe username and password above. Your username was sent to you 
+		    when you completed Step 1 of the study. Your password is whatever you updated 
+		    it to when you registered the Beiwe App.</li>
                 <li>Select the "Choose file" button above and select your screenshots. Check the box
 		    confirming that you are uploading app usage screenshots that have been cropped 
 		    to remove personally identifying information and not anything of an offensive 
-		    nature. Select "Upload."</li>
-                <li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit. </li>
+		    nature. The maximum allowed upload size is 5MB. Select "Upload."</li>
+                <li>Go back to the Beiwe app, select "I have uploaded my digital selfie!" and submit. </li>
+		<li>To make it easier to upload you next set of digital selfies, you could add a 
+		    bookmark to this page using the center icon (box with arrow pointing upward) 
+		    of Safari's bottom toolbar and allow the browser to save your username and password when asked.</li>
             </ol>
  
             <h4>Android instructions:</h4>
             <ol>
-                <li>Open your phone's "Settings" app.</li>
-                <li>Select "Battery."</li>
-                <li>Select the 3-dot menu, and select to "Battery usage."</li>
-                <li>Select the 3 dot menu again, and choose "Show full device usage."</li>
-                <li>Take a screenshot(s) of your app usage for the past week by pressing and holding the volume and
-                    power buttons simultaneously. You will need to take at least 7 screenshots: one for each day
-                    of the past week.</li>
-                <li>Enter your Beiwe username and password above. </li>
-                <li>Select the "Choose file" button above, select your screenshots, and select "Upload."</li>
-                <li>Go back to the Beiwe app, select "uploaded my digital selfie!" and submit.</li>
+
+		    <li>Open the Android Settings from its Home screen shortcut</li>
+		    <li>Select Digital wellbeing, a dashboard will open showing your total screen
+			time for today surrounded by a circular chart that illustrates the breakdown of the time by App.</li>
+		    <li>Open the detailed view by touching the screen time in the middle of the circle chart.</li>
+		    <li>Using the left arrow under the bar chart of your daily usage, change the display date
+			    to the first day (Sunday) of the current week.</li>
+		    <li>Take a screenshot(s) of your app usage for the past week by pressing and holding the volume-down and 
+			    power buttons simultaneously. You will need to take at least 7 screenshots: one for each day of the past week.</li>
+                    <li>Enter your Beiwe username and password above. Your username was sent to you 
+		        when you completed Step 1 of the study. Your password is whatever you updated 
+		        it to when you registered the Beiwe App.</li>
+                    <li>Select the "Choose file" button above and select your screenshots. Check the box
+		        confirming that you are uploading app usage screenshots that have been cropped 
+		        to remove personally identifying information and not anything of an offensive 
+		        nature. The maximum allowed upload size is 5MB. Select "Upload."</li>
+                    <li>Go back to the Beiwe app, select "I have uploaded my digital selfie!" and submit. </li>
+		    <li>To make it easier to upload you next set of digital selfies, you could add a 
+		        bookmark to this page using the three dots in the upper right hand corner 
+			of the Chrome app and allow the browser to save your password when asked.</li>
+
             </ol>
         </div>
     </main>
@@ -96,11 +118,13 @@
 
         $(document).ready(function () {
             $('.custom-file input').change(function (e) {
+
+		$(this).next('.custom-file-label').removeClass('alert-danger alert-success').html('');
+
 		let total_file_size = 0;
 		for (index = 0; index < e.target.files.length; index++) {
                     total_file_size += e.target.files[index].size / 1024 / 1024;
                 }
-		    $(this).next('.custom-file-label').removeClass('alert-danger alert-success').html('');
 
 		    if(total_file_size > 5) {
 		        $(this).next('.custom-file-label').addClass('alert-danger').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB > 5MB`);
@@ -110,50 +134,72 @@
 
             });
             $('form').submit(function (e) {
-                e.preventDefault();
+		var form = this;
+
+                /*e.preventDefault();*/
+                e.stopPropagation();
+
 
                 $('#callback')
                     .removeClass('alert-danger alert-success')
                     .html('');
 
                 var data = new FormData(this);
-		let total_file_size = 0;
 
-		all_files = data.getAll("user_files")
-		for (index = 0; index < all_files.length; index++) {
+                let total_file_size = 0;
+                all_files = data.getAll("user_files")
+                for (index = 0; index < all_files.length; index++) {
                     total_file_size += all_files[index].size / 1024 / 1024;
                 }
-		if (total_file_size < 5) {
-		    console.log(`Uploading ${total_file_size} MB in ${all_files.length} files`);
+                if (total_file_size < 5) {
                     $.ajax({
-                        url: this.action,
+                        url: "https://beiwe-py3.ut-wcwh.org/upload_digital_selfie",
                         data: data,
                         processData: false,
                         contentType: false,
                         type: 'POST',
                         success: function(response){
+
+			    form.reset();
+                            $('#customFile').next('.custom-file-label').removeClass('alert-danger alert-success').html('Choose file(s)');
+
                             $('#callback')
                                 .addClass('alert-success')
                                 .html('Digital selfie upload completed successfully!');
+
+                            if (window.PasswordCredential) {
+                                var c = new PasswordCredential({
+                                        id: data.get('username'),
+                                        password: data.get('password'),
+                                        name: data.get('username')
+                                    });
+                                 return navigator.credentials.store(c);
+			    } else {
+                                /*$(form).attr('action', document.URL);
+                                form.submitted = false;
+                                form.submit();*/
+				/*return false;*/
+			    }
                         },
                         error: function (xhr, ajaxOptions, thrownError) {
-	                     console.log(xhr.responseText);
-			     var message = 'Digital selfie upload failed to load! '
-	                     if (xhr.responseText){
-	                         message += JSON.parse(xhr.responseText);
-	                     }
-	                     console.log(message)
+			    form.reset();
+                            $('#customFile').next('.custom-file-label').removeClass('alert-danger alert-success').html('Choose file(s)');
+
+                            var message = 'Digital selfie upload failed to load! '
+                            if (xhr.responseText){
+                                 message += JSON.parse(xhr.responseText);
+                            }
     
                             $('#callback')
                                 .addClass('alert-danger')
                                 .html(message);
                         }
                     });
-		} else {
-		    $('#callback')
-			.addClass('alert-danger')
-				.html('Total size of selected files(s) is larger than 5MB upload limit.');
-		}
+                } else {
+                    $('#callback')
+                        .addClass('alert-danger')
+                        .html('Total size of selected files(s) is larger than 5MB upload limit.');
+                }
             });
         });
 
