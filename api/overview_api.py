@@ -43,8 +43,9 @@ def get_fitbit_info(patient_id):
             }
         except BadResponse:
             print(BadResponse, file=sys.stderr)
+            return {}
     else:
-        return {}
+        return False
 
 
 @overview_api.route('/overview', methods=['GET'])
@@ -79,7 +80,5 @@ def overview_handler():
         'weather': {
             **weather
         },
-        'fitbit': {
-            **get_fitbit_info(patient_id)
-        }
+        'fitbit': get_fitbit_info(patient_id)
     }), 200
