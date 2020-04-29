@@ -23,7 +23,7 @@ def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static")
     set_secret_key(app)
     app.config['JWT_SECRET_KEY'] = app.secret_key
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=5)
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=1)
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)
     jwt = JWTManager(app)
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
