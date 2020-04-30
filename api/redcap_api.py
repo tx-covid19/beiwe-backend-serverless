@@ -5,6 +5,7 @@ from config.settings import REDCAP_SERVER_URL, REDCAP_API_TOKEN
 from database.redcap_models import RedcapRecord
 from database.user_models import Participant, StudyRelation
 from database.user_models import Researcher
+from libs.s3 import s3_upload
 
 redcap_api = Blueprint('redcap_api', __name__)
 
@@ -69,6 +70,8 @@ def redcap_handler():
         # Create user
         patient_id, password = Participant.create_with_password(study_id=study_id)
         patient = Participant.objects.get(patient_id__exact=patient_id)
+        s3_upload(patient_id, b"", patient.study.object_id)
+
         RedcapRecord(user=patient, record_id=record_id).save()
 
         # Upload data back
