@@ -4,7 +4,7 @@ import datetime
 
 from django.core.validators import URLValidator
 from django.utils import timezone
-from flask import abort, Blueprint, json, render_template, request, redirect, jsonify
+from flask import abort, Blueprint, json, render_template, request, redirect, flash
 from flask_cors import cross_origin
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequestKeyError
@@ -28,7 +28,7 @@ from database.study_models import ParticipantSurvey
 ################################################################################
 ############################# GLOBALS... #######################################
 ################################################################################
-external_api = Blueprint('external_api', __name__)
+digital_selfie_web_form = Blueprint('digital_selfie_web_form', __name__)
 
 
 def grab_file_extension(filename):
@@ -44,7 +44,7 @@ def contains_valid_selfie_extension(filename):
 ################################ UPLOADS #######################################
 ################################################################################
 
-# @external_api.route('/loaderio-8ed6e63e16e9e4d07d60a051c4ca6ecb/')
+# @digital_selfie_web_form.route('/loaderio-8ed6e63e16e9e4d07d60a051c4ca6ecb/')
 # def temp():
 #     from io import StringIO
 #     from flask import Response
@@ -52,9 +52,8 @@ def contains_valid_selfie_extension(filename):
 #                     mimetype="txt",
 #                     headers={'Content-Disposition':'attachment; filename="loaderio-8ed6e63e16e9e4d07d60a051c4ca6ecb.txt"'})
 
-
-@external_api.route('/upload_digital_selfie', methods=['POST', 'OPTIONS'])
-@cross_origin(origins=['http://127.0.0.1:5000', 'https://digitalselfie.ut-wcwh.org']) 
+@digital_selfie_web_form.route('/', methods=['GET', 'POST', 'OPTIONS'])
+#@cross_origin(origins=['http://127.0.0.1:5000', 'https://digitalselfie.ut-wcwh.org']) 
 def upload_digital_selfie():
     """ Entry point to upload GPS, Accelerometer, Audio, PowerState, Calls Log, Texts Log,
     Survey Response, and debugging files to s3.
@@ -75,24 +74,32 @@ def upload_digital_selfie():
     properly converted to Base64 encoded text, as a request parameter entitled "file".
     Provide the file name in a request parameter entitled "filename". """
 
-    patient_id = request.values.get('username').lower()
+    if request.method == 'GET':
+        return render_template('digital-selfie.html')
+
+    patient_id = request.values.get('username')
     if not patient_id:
-        return jsonify('Malformed request, username not found'), 400
+        flash('Malformed request, username not found', 'danger')
+        return redirect('/')
 
     try:
-        user = Participant.objects.get(patient_id=patient_id)
+        user = Participant.objects.get(patient_id=patient_id.lower())
     except:
-        return jsonify('Username or password incorrect'), 401
+        flash('Username or password incorrect', 'danger')
+        return redirect('/')
 
     password = request.values.get('password')
     if not password:
-        return jsonify('Malformed request, password not found'), 400
+        flash('Malformed request, password not found', 'danger')
+        return redirect('/')
 
     if not user.debug_validate_password(password):
-        return jsonify('Username or password incorrect'), 401
+        flash('Username or password incorrect', 'danger')
+        return redirect('/')
 
     if 'user_files' not in request.files:
-        return jsonify('Malformed request, user_files not found'), 403
+        flash('Malformed request, user_files not found', 'danger')
+        return redirect('/')
 
     for uploaded_file in request.files.getlist("user_files"):
 
@@ -106,7 +113,8 @@ def upload_digital_selfie():
             # not current behavior on any app
             pass
         else:
-            return jsonify('Malformed request, user_files not found'), 403
+            flash('Malformed request, user_files not found', 'danger')
+            return redirect('/')
 
         filename=f'RAW_DATA/{user.study.object_id}/{user.patient_id}/digital_selfie/{user.patient_id}_{datetime.datetime.now().isoformat()}.{grab_file_extension(filename)}'
 
@@ -130,7 +138,8 @@ def upload_digital_selfie():
                 # with a name like "rList-org.beiwe.app.LoadingActivity"
                 error_message += "there was no/an empty file, returning 200 OK so device deletes bad file."
                 log_error(Exception("upload error"), error_message)
-                return jsonify('Empty or missing file'), 403
+                flash('Empty or missing file', 'danger')
+                return redirect('/')
             
             elif not filename:
                 error_message += "there was no provided file name, this is an app error."
@@ -145,6 +154,8 @@ def upload_digital_selfie():
             sentry_client = make_sentry_client('eb', tags)
             sentry_client.captureMessage(error_message)
             
-            return jsonify(error_message), 500
+            flash(error_message, 'danger')
+            return redirect('/')
 
-        return jsonify("Upload was successful"), 200
+        flash("Upload was successful", 'success')
+        return redirect('/')
