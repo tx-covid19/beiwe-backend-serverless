@@ -1,10 +1,9 @@
 import boto3
 import Crypto
 
-from config.constants import DEFAULT_S3_RETRIES
 from config.settings import (BEIWE_SERVER_AWS_ACCESS_KEY_ID, BEIWE_SERVER_AWS_SECRET_ACCESS_KEY,
     S3_BUCKET, S3_REGION_NAME)
-from libs import encryption
+from libs.encryption import decrypt_server, encrypt_for_server
 
 
 class S3VersionException(Exception): pass
@@ -18,21 +17,22 @@ conn = boto3.client('s3',
 def s3_upload(key_path: str, data_string: bytes, study_object_id: str, raw_path=False) -> None:
     if not raw_path:
         key_path = study_object_id + "/" + key_path
-    data = encryption.encrypt_for_server(data_string, study_object_id)
+
+    data = encrypt_for_server(data_string, study_object_id)
     conn.put_object(Body=data, Bucket=S3_BUCKET, Key=key_path)#, ContentType='string')
 
 
-def s3_retrieve(key_path, study_object_id, raw_path=False, number_retries=DEFAULT_S3_RETRIES) -> bytes:
+def s3_retrieve(key_path: str, study_object_id: str, raw_path:bool=False, number_retries=3) -> bytes:
     """ Takes an S3 file path (key_path), and a study ID.  Takes an optional argument, raw_path,
     which defaults to false.  When set to false the path is prepended to place the file in the
     appropriate study_id folder. """
     if not raw_path:
         key_path = study_object_id + "/" + key_path
     encrypted_data = _do_retrieve(S3_BUCKET, key_path, number_retries=number_retries)['Body'].read()
-    return encryption.decrypt_server(encrypted_data, study_object_id)
+    return decrypt_server(encrypted_data, study_object_id)
 
 
-def _do_retrieve(bucket_name, key_path, number_retries=DEFAULT_S3_RETRIES):
+def _do_retrieve(bucket_name, key_path, number_retries=3):
     """ Run-logic to do a data retrieval for a file in an S3 bucket."""
     try:
         return conn.get_object(Bucket=bucket_name, Key=key_path, ResponseContentType='string')
@@ -114,7 +114,7 @@ def s3_delete(key_path):
 
 def create_client_key_pair(patient_id, study_id):
     """Generate key pairing, push to database, return sanitized key for client."""
-    public, private = encryption.generate_key_pairing()
+    public, private = generate_key_pairing()
     s3_upload("keys/" + patient_id + "_private", private, study_id)
     s3_upload("keys/" + patient_id + "_public", public, study_id)
 
@@ -122,16 +122,16 @@ def create_client_key_pair(patient_id, study_id):
 def get_client_public_key_string(patient_id, study_id) -> str:
     """Grabs a user's public key string from s3."""
     key_string = s3_retrieve("keys/" + patient_id + "_public", study_id)
-    return encryption.prepare_X509_key_for_java(key_string).decode()
+    return prepare_X509_key_for_java(key_string).decode()
 
 
 def get_client_public_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
     """Grabs a user's public key file from s3."""
     key = s3_retrieve("keys/" + patient_id +"_public", study_id)
-    return encryption.get_RSA_cipher(key)
+    return get_RSA_cipher(key)
 
 
 def get_client_private_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
     """Grabs a user's private key file from s3."""
     key = s3_retrieve("keys/" + patient_id +"_private", study_id)
-    return encryption.get_RSA_cipher(key)
+    return get_RSA_cipher(key)

@@ -1,34 +1,25 @@
-from multiprocessing.pool import ThreadPool
-from zipfile import ZipFile, ZIP_STORED
-
 from datetime import datetime
-from flask import Blueprint, request, abort, json, Response
+from multiprocessing.pool import ThreadPool
+from zipfile import ZIP_STORED, ZipFile
 
-# noinspection PyUnresolvedReferences
-from config import load_django
+from flask import abort, Blueprint, json, request, Response
 
-from config.constants import (API_TIME_FORMAT, VOICE_RECORDING, ALL_DATA_STREAMS,
-    SURVEY_ANSWERS, SURVEY_TIMINGS, IMAGE_FILE)
+from config.constants import (ALL_DATA_STREAMS, API_TIME_FORMAT, IMAGE_FILE, SURVEY_ANSWERS,
+    SURVEY_TIMINGS, VOICE_RECORDING)
+from database.data_access_models import (ChunkRegistry, InvalidUploadParameterError,
+    PipelineRegistry, PipelineUpload, PipelineUploadTags)
 from database.models import is_object_id
-from database.data_access_models import ChunkRegistry, PipelineRegistry
 from database.study_models import Study
 from database.user_models import Participant, Researcher, StudyRelation
 from libs.s3 import s3_retrieve, s3_upload
 from libs.streaming_bytes_io import StreamingBytesIO
 
-from database.data_access_models import PipelineUpload, InvalidUploadParameterError, \
-    PipelineUploadTags
-
-# Data Notes
-# The call log has the timestamp column as the 3rd column instead of the first.
-# The Wifi and Identifiers have timestamp in the file name.
-# The debug log has many lines without timestamps.
+class DummyError(Exception): pass
 
 data_access_api = Blueprint('data_access_api', __name__)
 
-class DummyError(Exception): pass
-
 #########################################################################################
+
 
 def get_and_validate_study_id(chunked_download=False):
     """
@@ -38,48 +29,46 @@ def get_and_validate_study_id(chunked_download=False):
     Study object id otherwise invalid causes 400 error.
     Study does not exist in our database causes 404 error.
     """
-    study = _get_study_or_abort_404(request.values.get('study_id', None),
-                                    request.values.get('study_pk', None))
+    study = _get_study_or_abort_404(
+        study_object_id=request.values.get('study_id', None),
+        study_pk=request.values.get('study_pk', None)
+    )
 
     try:
-        # FIXME: this is an unsafe solution to identifying the exception to the raw data access rule
         # for the batch user tasks. Update the researcher model to have a special flag.
         r = Researcher.objects.get(access_key_id=request.values["access_key"])
-        override_for_batch = r.username.startswith("BATCH USER")
+        override_for_batch = r.values_list("is_batch_user", flat=True)
     except Researcher.DoesNotExist:
         override_for_batch = False
 
     if not override_for_batch and not study.is_test and chunked_download:
         # You're only allowed to download chunked data from test studies
-        print("study '%s' does not allow raw data download." % study.name)
         return abort(404)
     else:
         return study
 
 
-def _get_study_or_abort_404(study_object_id, study_pk):
+def _get_study_or_abort_404(study_object_id, study_pk) -> Study:
     if study_object_id:
         # If the ID is incorrectly sized, we return a 400
         if not is_object_id(study_object_id):
-            print("Received invalid length objectid as study_id in the data access API.")
             return abort(400)
         # If no Study with the given ID exists, we return a 404
         try:
-            study = Study.objects.get(object_id=study_object_id)
+            return Study.objects.get(object_id=study_object_id)
         except Study.DoesNotExist:
-            print("study '%s' does not exist." % study_object_id)
             return abort(404)
-        else:
-            return study
     elif study_pk:
+        # we have to test that study_pk is coercible into an int.
+        try:
+            int(study_pk)
+        except ValueError:
+            return abort(400)
         # If no Study with the given ID exists, we return a 404
         try:
-            study = Study.objects.get(pk=study_pk)
+            return Study.objects.get(pk=study_pk)
         except Study.DoesNotExist:
-            print("study '%s' does not exist." % study_pk)
             return abort(404)
-        else:
-            return study
     else:
         return abort(400)
 
@@ -143,13 +132,11 @@ def get_users_in_study():
     study_object_id = request.values.get("study_id", "")
     # if not is_object_id(study_object_id):
     if not is_object_id(study_object_id):
-        print("provided object id '%s' is not an object id" % study_object_id)
         return abort(404)
 
     try:
         study = Study.objects.get(object_id=study_object_id)
     except Study.DoesNotExist:
-        print("study '%s' does not exist" % study_object_id)
         return abort(404)
 
     get_and_validate_researcher(study)
@@ -198,7 +185,7 @@ def get_data():
     else:
         return Response(
                 zip_generator(get_these_files, construct_registry=True),
-                mimetype="zip"
+                mimetype="zip",
         )
 
 
@@ -220,8 +207,7 @@ def zip_generator(files_list, construct_registry=False):
 
     zip_output = StreamingBytesIO()
     zip_input = ZipFile(zip_output, mode="w", compression=ZIP_STORED, allowZip64=True)
-    # random_id = generate_random_string()[:32]
-    # print "returning data for query %s" % random_id
+
     try:
         # chunks_and_content is a list of tuples, of the chunk and the content of the file.
         # chunksize (which is a keyword argument of imap, not to be confused with Beiwe Chunks)
@@ -238,11 +224,11 @@ def zip_generator(files_list, construct_registry=False):
                 duplicate_files.add((file_name, chunk['chunk_path']))
                 continue
             processed_files.add(file_name)
-            # print file_name
+
             zip_input.writestr(file_name, file_contents)
             # These can be large, and we don't want them sticking around in memory as we wait for the yield
             del file_contents, chunk
-            # print len(zip_output)
+
             x = zip_output.getvalue()
             total_size += len(x)
             # print "%s: %sK, %sM" % (random_id, total_size / 1024, total_size / 1024 / 1024)
@@ -252,6 +238,8 @@ def zip_generator(files_list, construct_registry=False):
 
         if construct_registry:
             zip_input.writestr("registry", json.dumps(file_registry))
+            yield zip_output.getvalue()
+            zip_output.empty()
 
         # close, then yield all remaining data in the zip.
         zip_input.close()
@@ -267,12 +255,10 @@ def zip_generator(files_list, construct_registry=False):
         # and also to print an error to the log if we need to.
         pool.close()
         pool.terminate()
-        if duplicate_files:
-            duplcate_file_message = "encountered duplicate files: %s" % ",".join(
-                    str(name_path) for name_path in duplicate_files)
 
 
 #########################################################################################
+
 
 def parse_registry(reg_dat):
     """ Parses the provided registry.dat file and returns a dictionary of chunk
@@ -302,8 +288,8 @@ def determine_file_name(chunk):
         return "%s/%s/%s/%s/%s" % (
             chunk["participant__patient_id"],
             chunk["data_type"],
-            chunk["chunk_path"].rsplit("/", 3)[1], # this is the survey id
-            chunk["chunk_path"].rsplit("/", 2)[1], # this is the instance of the user taking a survey
+            chunk["chunk_path"].rsplit("/", 3)[1],  # this is the survey id
+            chunk["chunk_path"].rsplit("/", 2)[1],  # this is the instance of the user taking a survey
             chunk["chunk_path"].rsplit("/", 1)[1]
         )
 
@@ -333,7 +319,7 @@ def str_to_datetime(time_string):
     try:
         return datetime.strptime(time_string, API_TIME_FORMAT)
     except ValueError as e:
-        if "does not match format" in e.message:
+        if "does not match format" in str(e):
             return abort(400)
 
 
@@ -363,7 +349,6 @@ def determine_data_streams_for_db_query(query):
 
         for data_stream in query['data_types']:
             if data_stream not in ALL_DATA_STREAMS:
-                print("data stream '%s' is invalid" % data_stream)
                 return abort(404)
 
 
@@ -380,7 +365,6 @@ def determine_users_for_db_query(query):
 
         # Ensure that all user IDs are patient_ids of actual Participants
         if not Participant.objects.filter(patient_id__in=query['user_ids']).count() == len(query['user_ids']):
-            print("invalid user ids: %s" % query['user_ids'])
             return abort(404)
 
 
@@ -437,7 +421,7 @@ VALID_PIPELINE_POST_PARAMS.append("secret_key")
 
 # before reenabling, audio filenames on s3 were incorrectly enforced to have millisecond
 # precision, remove trailing zeros this does not affect data downloading because those file times
-    #  are generated from the chunk registry
+#  are generated from the chunk registry
 @data_access_api.route("/pipeline-upload/v1", methods=['POST', 'GET'])
 def data_pipeline_upload():
     #Cases: invalid access creds
@@ -445,7 +429,7 @@ def data_pipeline_upload():
     access_secret = request.values["secret_key"]
 
     if not Researcher.objects.filter(access_key_id=access_key).exists():
-        return abort(403) # access key DNE
+        return abort(403)  # access key DNE
     researcher = Researcher.objects.get(access_key_id=access_key)
     if not researcher.validate_access_credentials(access_secret):
         return abort(403)  # incorrect secret key
@@ -473,7 +457,7 @@ def data_pipeline_upload():
     try:
         creation_args, tags = PipelineUpload.get_creation_arguments(request.values, request.files['file'])
     except InvalidUploadParameterError as e:
-        return Response(e.message, 400)
+        return Response(str(e), 400)
     s3_upload(
             creation_args['s3_path'],
             request.files['file'].read(),
@@ -559,7 +543,6 @@ def pipeline_data_download():
     else:
         query = PipelineUpload.objects.filter(study__id=study_obj.id)
 
-    ####################################
     return Response(
             zip_generator_for_pipeline(query),
             mimetype="zip",
