@@ -5,24 +5,23 @@ import traceback
 from collections import defaultdict, deque
 from datetime import datetime
 from multiprocessing.pool import ThreadPool
-from pprint import pprint
 from typing import DefaultDict, Generator, List, Tuple
 
+from botocore.exceptions import ReadTimeoutError
 from cronutils.error_handler import ErrorHandler
+from django.core.exceptions import ValidationError
 
-# noinspection PyUnresolvedReferences
-from config import load_django
 from config.constants import (ACCELEROMETER, ANDROID_LOG_FILE, API_TIME_FORMAT, CALL_LOG,
-    CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES, CHUNKS_FOLDER, CONCURRENT_NETWORK_OPS,
-    DATA_PROCESSING_NO_ERROR_STRING, FILE_PROCESS_PAGE_SIZE, IDENTIFIERS, IOS_LOG_FILE,
+    CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES, CHUNKS_FOLDER,
+    DATA_PROCESSING_NO_ERROR_STRING, IDENTIFIERS, IOS_LOG_FILE,
     SURVEY_DATA_FILES, SURVEY_TIMINGS, UPLOAD_FILE_TYPE_MAPPING, WIFI)
+from config.settings import CONCURRENT_NETWORK_OPS, FILE_PROCESS_PAGE_SIZE
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
-from database.study_models import Survey
+from database.survey_models import Survey
 from database.user_models import Participant
 from libs.s3 import s3_retrieve, s3_upload
 
 
-class OldBotoImportThatNeedsFixingError(Exception): pass
 class EverythingWentFine(Exception): pass
 class ProcessingOverlapError(Exception): pass
 
@@ -134,6 +133,7 @@ def do_process_user_file_chunks(count: int, error_handler: ErrorHandler, skip_co
                 raise data['exception']
 
             if data['chunkable']:
+                # case: chunkable data files
                 newly_binified_data, survey_id_hash = process_csv_data(data)
                 if data['data_type'] in SURVEY_DATA_FILES:
                     survey_id_dict[survey_id_hash] = resolve_survey_id_from_file_name(data['ftp']["s3_file_path"])
@@ -143,21 +143,39 @@ def do_process_user_file_chunks(count: int, error_handler: ErrorHandler, skip_co
                 else:  # delete empty files from FilesToProcess
                     ftps_to_remove.add(data['ftp']['id'])
                 continue
-
-            # if not data['chunkable']
             else:
+                # case: unchunkable data file
                 timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
                 # Since we aren't binning the data by hour, just create a ChunkRegistry that
                 # points to the already existing S3 file.
-                ChunkRegistry.register_unchunked_data(
-                    data['data_type'],
-                    timestamp,
-                    data['ftp']['s3_file_path'],
-                    data['ftp']['study'].pk,
-                    data['ftp']['participant'].pk,
-                    data['file_contents'],
-                )
-                ftps_to_remove.add(data['ftp']['id'])
+                try:
+                    ChunkRegistry.register_unchunked_data(
+                        data['data_type'],
+                        timestamp,
+                        data['ftp']['s3_file_path'],
+                        data['ftp']['study'].pk,
+                        data['ftp']['participant'].pk,
+                        data['file_contents'],
+                    )
+                    ftps_to_remove.add(data['ftp']['id'])
+                except ValidationError as ve:
+                    if len(ve.messages) != 1:
+                        # case: the error case (below) is very specific, we only want that singular error.
+                        raise
+
+                    # case: an unchunkable file was re-uploaded, causing a duplicate file path collision
+                    # we detect this specific case and update the registry with the new file size
+                    # (hopefully it doesn't actually change)
+                    if 'Chunk registry with this Chunk path already exists.' in ve.messages:
+                        ChunkRegistry.update_registered_unchunked_data(
+                            data['data_type'],
+                            data['ftp']['s3_file_path'],
+                            data['file_contents'],
+                        )
+                        ftps_to_remove.add(data['ftp']['id'])
+                    else:
+                        # any other errors, add
+                        raise
 
     pool.close()
     pool.terminate()
@@ -192,15 +210,15 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
                     chunk = ChunkRegistry.objects.get(chunk_path=chunk_path)
                     try:
                         s3_file_data = s3_retrieve(chunk_path, study_id, raw_path=True)
-                    except OldBotoImportThatNeedsFixingError as e:
-                        # The following check is correct for boto version 2.38.0
-                        if "The specified key does not exist." == e.message:
+                    except ReadTimeoutError as e:
+                        # The following check was correct for boto 2, still need to hit with boto3 test.
+                        if "The specified key does not exist." == str(e):
                             # This error can only occur if the processing gets actually interrupted and
                             # data files fail to upload after DB entries are created.
                             # Encountered this condition 11pm feb 7 2016, cause unknown, there was
                             # no python stacktrace.  Best guess is mongo blew up.
                             # If this happened, delete the ChunkRegistry and push this file upload to the next cycle
-                            chunk.remove()
+                            chunk.remove()  # this line of code is ancient and almost definitely wrong.
                             raise ChunkFailedToExist("chunk %s does not actually point to a file, deleting DB entry, should run correctly on next index." % chunk_path)
                         raise  # Raise original error if not 404 s3 error
 
@@ -253,6 +271,7 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
                 print("FAILED TO UPDATE: study_id:%s, user_id:%s, data_type:%s, time_bin:%s, header:%s "
                       % (study_id, user_id, data_type, time_bin, updated_header))
                 raise
+
             else:
                 # If no exception was raised, the FTP has completed processing. Add it to the set of
                 # retireable (i.e. completed) FTPs.
@@ -433,7 +452,7 @@ def process_csv_data(data: dict):
 """############################ CSV Fixes #####################################"""
 
 
-def fix_survey_timings(header: bytes, rows_list: List[bytes], file_path: str) -> bytes:
+def fix_survey_timings(header: bytes, rows_list: List[List[bytes]], file_path: str) -> bytes:
     """ Survey timings need to have a column inserted stating the survey id they come from."""
     survey_id = file_path.rsplit("/", 2)[1].encode()
     for row in rows_list:
@@ -550,14 +569,7 @@ def construct_csv_string(header: bytes, rows_list: List[bytes]) -> bytes:
 
     rows = []
     for row_items in rows_list:
-
-        try:
-            rows.append(b",".join(row_items))
-        except TypeError:
-            print("######################################################################3")
-            pprint(row_items)
-            print("######################################################################3")
-            raise
+        rows.append(b",".join(row_items))
 
     del rows_list, row_items
 
@@ -585,7 +597,6 @@ def batch_retrieve_for_processing(ftp_as_object: FileToProcess) -> dict:
     """ Used for mapping an s3_retrieve function. """
     # Convert the ftp object to a dict so we can use __getattr__
     ftp = ftp_as_object.as_dict()
-
     data_type = file_path_to_data_type(ftp['s3_file_path'])
 
     # Create a dictionary to populate and return
@@ -601,8 +612,7 @@ def batch_retrieve_for_processing(ftp_as_object: FileToProcess) -> dict:
     # Try to retrieve the file contents. If any errors are raised, store them to be raised by the
     # parent function
     try:
-        print(ftp['s3_file_path'] + ", getting data...")
-        ret['file_contents'] = s3_retrieve(ftp['s3_file_path'], ftp["study"].object_id.encode(), raw_path=True)
+        ret['file_contents'] = s3_retrieve(ftp['s3_file_path'], ftp["study"].object_id, raw_path=True)
     except Exception as e:
         traceback.print_exc()
         ret['traceback'] = sys.exc_info()
@@ -616,7 +626,7 @@ def batch_upload(upload: Tuple[dict, str, bytes, str]):
     try:
         if len(upload) != 4:
             # upload should have length 4; this is for debugging if it doesn't
-            print(upload)
+            print("upload length not equal to 4: ", upload)
         chunk, chunk_path, new_contents, study_object_id = upload
         del upload
 
@@ -624,7 +634,6 @@ def batch_upload(upload: Tuple[dict, str, bytes, str]):
             raise Exception(chunk_path)
 
         s3_upload(chunk_path, codecs.decode(new_contents, "zip"), study_object_id, raw_path=True)
-        print("data uploaded!", chunk_path)
 
         if isinstance(chunk, ChunkRegistry):
             # If the contents are being appended to an existing ChunkRegistry object
@@ -667,7 +676,7 @@ class ChunkFailedToExist(Exception): pass
 # This is useful for performance testing, replace the real threadpool with this one and everything
 # will suddenly be single-threaded, making it much easier to profile.
 # class ThreadPool():
-#     def map(self, *args, **kwargs): #the existance of that self variable is key
+#     def map(self, *args, **kwargs): # the existence of that self variable is key
 #         # we actually want to cut off any threadpool args, which is conveniently easy because map does not use kwargs!
 #         return map(*args)
 #     def terminate(self): pass

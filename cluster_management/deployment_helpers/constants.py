@@ -6,6 +6,19 @@ from os.path import abspath, join as path_join
 
 
 ####################################################################################################
+##################################### Behavioral Settings ##########################################
+####################################################################################################
+
+class TRUE_FALSE:
+    _is_true = False
+    def set(self, set_is_true: bool): self._is_true = set_is_true
+    def __bool__(self): return self._is_true
+    def __repr__(self): return str(self._is_true)
+
+DEV_MODE = TRUE_FALSE()
+PROD_MODE = TRUE_FALSE()
+
+####################################################################################################
 ##################################### General Constants ############################################
 ####################################################################################################
 
@@ -102,22 +115,25 @@ AWS_CREDENTIALS_FILE_KEYS = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
 # Local folder paths
 CLUSTER_MANAGEMENT_FOLDER = abspath(__file__).rsplit('/', 2)[0]
 PUSHED_FILES_FOLDER = path_join(CLUSTER_MANAGEMENT_FOLDER, 'pushed_files')
-USER_SPECIFIC_CONFIG_FOLDER = path_join(CLUSTER_MANAGEMENT_FOLDER, 'environment_configuration')
+DEPLOYMENT_SPECIFIC_CONFIG_FOLDER = path_join(CLUSTER_MANAGEMENT_FOLDER, 'environment_configuration')
 GENERAL_CONFIG_FOLDER = path_join(CLUSTER_MANAGEMENT_FOLDER, 'general_configuration')
 STAGED_FILES = path_join(CLUSTER_MANAGEMENT_FOLDER, 'staged_files')
+RABBIT_MQ_PASSWORD_FILE_NAME = "rabbit_mq_password.txt"
+FIREBASE_CREDENTIALS_FILE_NAME = "firebase_credentials.json"
 
 ## Global EC2 Instance __remote__ folder paths
 REMOTE_HOME_DIR = path_join('/home', REMOTE_USERNAME)
+REMOTE_PROJECT_DIR = path_join(REMOTE_HOME_DIR, "beiwe-backend")
 
 ## Global EC2 Instance remote file paths
-DEPLOYMENT_ENVIRON_SETTING_REMOTE_FILE_PATH = path_join(REMOTE_HOME_DIR, 'beiwe-backend/config/remote_db_env.py')
+DEPLOYMENT_ENVIRON_SETTING_REMOTE_FILE_PATH = path_join(REMOTE_PROJECT_DIR, 'config/remote_db_env.py')
 LOG_FILE = path_join(REMOTE_HOME_DIR, 'server_setup.log')
-
 
 ## Management Tool Configuration Files
 AWS_CREDENTIALS_FILE = path_join(GENERAL_CONFIG_FOLDER, 'aws_credentials.json')
 GLOBAL_CONFIGURATION_FILE = path_join(GENERAL_CONFIG_FOLDER, 'global_configuration.json')
-AWS_PEM_FILE = path_join(USER_SPECIFIC_CONFIG_FOLDER, 'aws_deployment_key.pem')
+AWS_PEM_FILE = path_join(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, 'aws_deployment_key.pem')
+
 
 ## Management Tool Configuration Loaders
 def get_global_config():
@@ -151,7 +167,7 @@ def get_instance_assume_role_policy_document():
 
 def get_automation_policy():
     with open(AUTOMATION_POLICY_PATH, "r") as document:
-            return document.read()
+        return document.read()
 
 
 def get_aws_access_policy():
@@ -173,24 +189,21 @@ REMOTE_APACHE_CONFIG_FILE_PATH = path_join(REMOTE_HOME_DIR, 'ami_apache.conf')
 LOCAL_RABBIT_MQ_CONFIG_FILE_PATH = path_join(PUSHED_FILES_FOLDER, 'rabbitmq_configuration.txt')
 REMOTE_RABBIT_MQ_CONFIG_FILE_PATH = path_join(REMOTE_HOME_DIR, 'rabbitmq_configuration.txt')
 REMOTE_RABBIT_MQ_FINAL_CONFIG_FILE_PATH = path_join('/etc/rabbitmq/rabbitmq-env.conf')
-
-# Well... this should have been CLUSTER_MANAGEMENT_FOLDER + 'rabbit_mq_password.txt', but this has
-# already been deployed for months.  TODO: insert some code here to safely fix this.
-RABBIT_MQ_PASSWORD_FILE = CLUSTER_MANAGEMENT_FOLDER + 'rabbit_mq_password.txt'
+REMOTE_RABBIT_MQ_PASSWORD_FILE_PATH = path_join(REMOTE_PROJECT_DIR, "manager_ip")
+REMOTE_FIREBASE_CREDENTIALS_FILE_PATH = path_join(REMOTE_PROJECT_DIR, "firebase_cloud_messaging_credentials.json")
 
 ####################################################################################################
 ####################################### Dynamic Files ##############################################
 ####################################################################################################
 
-
 ## EC2 Instance Configuration Files
 def get_pushed_full_processing_server_env_file_path(eb_environment_name):
     """ This is the python file that contains the environment details for an ubuntu install. """
-    return path_join(USER_SPECIFIC_CONFIG_FOLDER, eb_environment_name + '_remote_db_env.py')
+    return path_join(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + '_remote_db_env.py')
 
 
 def get_finalized_credentials_file_path(eb_environment_name):
-    return path_join(USER_SPECIFIC_CONFIG_FOLDER, eb_environment_name + '_finalized_settings.json')
+    return path_join(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + '_finalized_settings.json')
 
 
 def get_finalized_environment_variables(eb_environment_name):
@@ -201,12 +214,24 @@ def get_finalized_environment_variables(eb_environment_name):
 ## Database configuration
 def get_db_credentials_file_path(eb_environment_name):
     """ Use the get_full_db_credentials function in rds to get database credentials. """
-    return path_join(USER_SPECIFIC_CONFIG_FOLDER, eb_environment_name + "_database_credentials.json")
+    return path_join(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + "_database_credentials.json")
 
 
 ## Beiwe Environment Files
 def get_beiwe_python_environment_variables_file_path(eb_environment_name):
-    return path_join(USER_SPECIFIC_CONFIG_FOLDER, eb_environment_name + "_beiwe_environment_variables.json")
+    return path_join(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + "_beiwe_environment_variables.json")
+
+
+def get_rabbit_mq_manager_ip_file_path(eb_environment_name):
+    return path_join(
+        DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + "_" + RABBIT_MQ_PASSWORD_FILE_NAME
+    )
+
+
+def get_firebase_credentials_file_path(eb_environment_name):
+    return path_join(
+        DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + "_" + FIREBASE_CREDENTIALS_FILE_NAME
+    )
 
 
 def get_beiwe_environment_variables(eb_environment_name):
@@ -216,13 +241,14 @@ def get_beiwe_environment_variables(eb_environment_name):
 
 ## Processing worker and management servers
 def get_server_configuration_file_path(eb_environment_name):
-    return path_join(USER_SPECIFIC_CONFIG_FOLDER, eb_environment_name + '_server_settings.json')
+    return path_join(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, eb_environment_name + '_server_settings.json')
 
 
 def get_server_configuration_file(eb_environment_name):
     with open(get_server_configuration_file_path(eb_environment_name), 'r') as f:
         return json.load(f)
-    
+
+
 
 ####################################################################################################
 ####################################### AWS Strings ################################################
@@ -276,7 +302,7 @@ AWS_EB_WORKER_TIER = get_env(
 
 
 ####################################################################################################
-###################################### UI Strings ##################################################
+###################################### RDS Strings #################################################
 ####################################################################################################
 
 RDS_NAME_OVERRIDE = get_env("RDS_NAME_OVERRIDE", None)
@@ -308,3 +334,38 @@ This command exists because Instance Profiles are not fully-exposed on the AWS C
 Note 1: Run this command repeatedly until it tells you it cannot delete anything.
 Note 2: You may have to go and manually delete a Service Role if you are intent on totally resetting your Elastic Beanstalk cluster.
 """
+
+
+CREATE_ENVIRONMENT_HELP = "creates new environment with the provided environment name"
+
+CREATE_MANAGER_HELP = "creates a data processing manager for the provided environment"
+
+CREATE_WORKER_HELP = "creates a data processing worker for the provided environment"
+
+HELP_SETUP_NEW_ENVIRONMENT_HELP = "assists in creation of configuration files for a beiwe environment deployment"
+
+FIX_HEALTH_CHECKS_BLOCKING_DEPLOYMENT_HELP = "sometimes deployment operations fail stating that health checks do not have sufficient permissions, run this command to fix that."
+
+DEV_HELP = "Worker and Manager deploy operations will swap the server over to the development branch instead of master (or you can set the branch explicitly by setting the 'DEV_BRAPROD_HELPNCH' environment variable)."
+
+PROD_HELP = "Worker and Manager deploy operations will swap the server over to the production branch instead of master."
+
+PURGE_INSTANCE_PROFILES_HELP = PURGE_COMMAND_BLURB
+
+TERMINATE_PROCESSING_SERVERS_HELP = "Terminates all manager and data processing servers (does not touch frontend servers).  You will need to do this from time to time as architectural details change."
+
+GET_MANAGER_IP_ADDRESS_HELP = "Prints the public IP address of the manager server for the cluster."
+GET_WORKER_IP_ADDRESS_HELP = "Prints the public IP addresses of the worker servers for the cluster."
+
+
+CHECK_FIREBASE_CREDS_PROMPT = "You have not provided a credentials file at '{file_path}'.\nIt is strongly recommended you follow the directions on the wiki and provide a firebase credentials json document.  As mobile device operating systems advance many details change.  Most critically power saving mechanisms have, over the lifetime of the Beiwe project, become much more aggressive.  As a result the architecture of the Beiwe apps must change too.  These credentials are used to provide push notifications to the app from your servers in order to trigger events.  Beiwe will still work without them, but data collection is very likely to suffer."
+CHECK_FIREBASE_CREDS_PROMPT2 = "Would you like to exit and retry with credentials? Y/N: "
+
+####################################################################################################
+########################################## Other ###################################################
+####################################################################################################
+
+MANAGER_SERVER_INSTANCE_TYPE = "MANAGER_SERVER_INSTANCE_TYPE"
+WORKER_SERVER_INSTANCE_TYPE = "WORKER_SERVER_INSTANCE_TYPE"
+ELASTIC_BEANSTALK_INSTANCE_TYPE = "ELASTIC_BEANSTALK_INSTANCE_TYPE"
+DB_SERVER_TYPE = "DB_SERVER_TYPE"

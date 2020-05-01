@@ -4,33 +4,40 @@ from datetime import date, datetime, timedelta
 
 from flask import abort, Blueprint, render_template, request
 
-from config.constants import (ALL_DATA_STREAMS, complete_data_stream_dict,
-    processed_data_stream_dict, REDUCED_API_TIME_FORMAT)
+from config.constants import (ALL_DATA_STREAMS, API_DATE_FORMAT, COMPLETE_DATA_STREAM_DICT,
+    PROCESSED_DATA_STREAM_DICT)
+from database.dashboard_models import DashboardColorSetting, DashboardGradient, DashboardInflection
 from database.data_access_models import ChunkRegistry, PipelineRegistry
-from database.study_models import (DashboardColorSetting, DashboardGradient, DashboardInflection,
-    Study)
+from database.study_models import Study
 from database.user_models import Participant
 from libs.admin_authentication import (authenticate_researcher_study_access,
     get_researcher_allowed_studies, researcher_is_an_admin)
 
 dashboard_api = Blueprint('dashboard_api', __name__)
 
-DATETIME_FORMAT_ERROR = \
-    "Dates and times provided to this endpoint must be formatted like this: 2010-11-22 (%s)" % REDUCED_API_TIME_FORMAT
+DATETIME_FORMAT_ERROR = f"Dates and times provided to this endpoint must be formatted like this: " \
+                        f"2010-11-22 ({API_DATE_FORMAT})"
+
+
+def get_study_or_404(study_id):
+    try:
+        return Study.objects.get(pk=study_id)
+    except Study.DoesNotExist:
+        return abort(404)
 
 
 @dashboard_api.route("/dashboard/<string:study_id>", methods=["GET"])
 @authenticate_researcher_study_access
 def dashboard_page(study_id):
-    study = get_study_or_404(study_id)
     """ information for the general dashboard view for a study"""
+    study = get_study_or_404(study_id)
     participants = list(Participant.objects.filter(study=study_id).values_list("patient_id", flat=True))
     return render_template(
         'dashboard/dashboard.html',
         study=study,
         participants=participants,
         study_id=study_id,
-        data_stream_dict=complete_data_stream_dict,
+        data_stream_dict=COMPLETE_DATA_STREAM_DICT,
         allowed_studies=get_researcher_allowed_studies(),
         is_admin=researcher_is_an_admin(),
         page_location='dashboard_landing',
@@ -40,29 +47,25 @@ def dashboard_page(study_id):
 @dashboard_api.route("/dashboard/<string:study_id>/data_stream/<string:data_stream>", methods=["GET", "POST"])
 @authenticate_researcher_study_access
 def get_data_for_dashboard_datastream_display(study_id, data_stream):
-
-    """ parses information for the data stream dashboard view GET and POST requests"""
-    # left the post and get requests in the same function because the body of the get request relies on the variables
-    # set in the post request if a post request is sent --thus if a post request is sent we don't want all of the get
-    # request running
+    """ Parses information for the data stream dashboard view GET and POST requests left the post
+    and get requests in the same function because the body of the get request relies on the
+    variables set in the post request if a post request is sent --thus if a post request is sent
+    we don't want all of the get request running. """
     study = get_study_or_404(study_id)
 
-    # -------------------------- for a POST request --------------------------------------
     if request.method == "POST":
         color_low_range, color_high_range, all_flags_list = set_default_settings_post_request(study, data_stream)
-        if color_low_range == 0 and color_high_range == 0:
-            show_color = "false"
-        else:
-            show_color = "true"
-
-    # ------------------ below is for a GET request - POST requests will ALSO run this code! ------------------------
+        show_color = "false" if color_low_range == 0 and color_high_range == 0 else "true"
     else:
         color_low_range, color_high_range, show_color = extract_range_args_from_request()
         all_flags_list = extract_flag_args_from_request()
+
     default_filters = ""
     if DashboardColorSetting.objects.filter(data_type=data_stream, study=study).exists():
         settings = DashboardColorSetting.objects.get(data_type=data_stream, study=study)
         default_filters = DashboardColorSetting.get_dashboard_color_settings(settings)
+    else:
+        settings = None
 
     # -------------------------------- dealing with color settings -------------------------------------------------
     # test if there are default settings saved,
@@ -70,10 +73,11 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     if default_filters != "":
         inflection_info = default_filters["inflections"]
         if all_flags_list == [] and color_high_range is None and color_low_range is None:
-            # since none of the filters are set, parse default filters to pass in the default settings
-            # set the values for gradient filter
-            # backend: color_range_min, color_range_max --> frontend: color_low_range, color_high_range
-            # the above is consistent throughout the back and front ends
+            # since none of the filters are set, parse default filters to pass in the default
+            # settings set the values for gradient filter
+
+            # backend: color_range_min, color_range_max --> frontend: color_low_range,
+            # color_high_range the above is consistent throughout the back and front ends
             if settings.gradient_exists():
                 gradient_info = default_filters["gradient"]
                 color_low_range = gradient_info["color_range_min"]
@@ -88,14 +92,11 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
             # the html is expecting a list of lists for the flags [[operator, value], ... ]
             all_flags_list = []
             for flag_info in inflection_info:
-                single_flag = [flag_info["operator"].encode("utf-8"), flag_info["inflection_point"]]
+                single_flag = [flag_info["operator"], flag_info["inflection_point"]]
                 all_flags_list.append(single_flag)
 
     # change the url params from jinja t/f to python understood T/F
-    if show_color == "true":
-        show_color = True
-    elif show_color == "false":
-        show_color = False
+    show_color = True if show_color == "true" else False
 
     # -----------------------------------  general data fetching --------------------------------------------
     start, end = extract_date_args_from_request()
@@ -110,18 +111,23 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     if data_stream in ALL_DATA_STREAMS:
         first_day, last_day = dashboard_chunkregistry_date_query(study_id, data_stream)
         if first_day is not None:
-            stream_data = OrderedDict((participant.patient_id,
-                                       dashboard_chunkregistry_query(participant.id, data_stream=data_stream))
-                                      for participant in participant_objects
-                                      )
+            stream_data = OrderedDict(
+                (
+                    participant.patient_id,
+                    dashboard_chunkregistry_query(participant.id, data_stream=data_stream)
+                )
+                for participant in participant_objects
+            )
             unique_dates, _, _ = get_unique_dates(start, end, first_day, last_day)
             next_url, past_url = create_next_past_urls(first_day, last_day, start=start, end=end)
 
             # get the byte streams per date for each patient for a specific data stream for those dates
             byte_streams = OrderedDict(
-                (participant.patient_id, [
-                    get_bytes_participant_match(stream_data[participant.patient_id], date) for date in unique_dates
-                ]) for participant in participant_objects
+                (
+                    participant.patient_id,
+                    [get_bytes_participant_match(stream_data[participant.patient_id], date) for date in unique_dates]
+                )
+                for participant in participant_objects
             )
             # check if there is data to display
             data_exists = len([data for patient in byte_streams for data in byte_streams[patient] if data is not None]) > 0
@@ -134,9 +140,11 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
 
             # get the byte streams per date for each patient for a specific data stream for those dates
             byte_streams = OrderedDict(
-                (participant.patient_id, [
-                    get_bytes_processed_data_match(stream_data[participant.patient_id], date) for date in unique_dates
-                ]) for participant in participant_objects
+                (
+                    participant.patient_id,
+                    [get_bytes_processed_data_match(stream_data[participant.patient_id], date) for date in unique_dates]
+                )
+                for participant in participant_objects
             )
             # check if there is data to display
             data_exists = len(
@@ -152,13 +160,13 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     return render_template(
         'dashboard/data_stream_dashboard.html',
         study=study,
-        data_stream=complete_data_stream_dict.get(data_stream),
+        data_stream=COMPLETE_DATA_STREAM_DICT.get(data_stream),
         times=unique_dates,
         byte_streams=byte_streams,
         base_next_url=next_url,
         base_past_url=past_url,
         study_id=study_id,
-        data_stream_dict=complete_data_stream_dict,
+        data_stream_dict=COMPLETE_DATA_STREAM_DICT,
         color_low_range=color_low_range,
         color_high_range=color_high_range,
         first_day=first_day,
@@ -190,7 +198,8 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
         first_day, last_day = dashboard_chunkregistry_date_query(study_id)
         _, first_date_data_entry, last_date_data_entry = \
             get_unique_dates(start, end, first_day, last_day, chunks)
-
+    else:
+        last_date_data_entry = first_date_data_entry = None
     # --------------- dates for  processed data streams -------------------
     # all_data is a list of dicts [{"time_bin": , "stream": , "processed_data": }...]
     processed_first_date_data_entry, processed_last_date_data_entry, all_data = parse_patient_processed_data(study_id, participant)
@@ -210,6 +219,8 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
     if chunks or all_data:
         next_url, past_url = create_next_past_urls(first_date_data_entry, last_date_data_entry, start=start, end=end)
         unique_dates, _, _ = get_unique_dates(start, end, first_date_data_entry, last_date_data_entry)
+    else:
+        next_url = past_url = unique_dates = None
 
     # --------------------- get all the data using the correct unique dates from both data sets ----------------------
         # get the byte data for the dates that have data collected in that week
@@ -217,14 +228,21 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
         processed_byte_streams = OrderedDict(
             (stream, [
                 get_bytes_patient_processed_match(all_data, date, stream) for date in unique_dates
-            ]) for stream in processed_data_stream_dict
+            ]) for stream in PROCESSED_DATA_STREAM_DICT
         )
+    else:
+        processed_byte_streams = None
+
+
     if chunks:
         byte_streams = OrderedDict(
             (stream, [
                 get_bytes_data_stream_match(chunks, date, stream) for date in unique_dates
             ]) for stream in ALL_DATA_STREAMS
         )
+    else:
+        byte_streams = None
+
     if chunks and all_data:
         byte_streams.update(processed_byte_streams)
     elif all_data and not chunks:
@@ -238,7 +256,7 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
         processed_byte_streams = OrderedDict(
             (stream, [
                 None for date in unique_dates
-            ]) for stream in processed_data_stream_dict
+            ]) for stream in PROCESSED_DATA_STREAM_DICT
         )
         byte_streams.update(processed_byte_streams)
     # -------------------------  edge case if no data has been entered -----------------------------------
@@ -263,7 +281,7 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
         study_id=study_id,
         first_date_data=first_date_data_entry,
         last_date_data=last_date_data_entry,
-        data_stream_dict=complete_data_stream_dict,
+        data_stream_dict=COMPLETE_DATA_STREAM_DICT,
         allowed_studies=get_researcher_allowed_studies(),
         is_admin=researcher_is_an_admin(),
         page_location='dashboard_patient',
@@ -288,7 +306,7 @@ def parse_processed_data(study_id, participant_objects, data_stream):
         if pipeline_chunks is not None:
             for chunk in pipeline_chunks:
                 if data_stream in chunk and "day" in chunk and chunk[data_stream] != "NA":
-                    time_bin = datetime.strptime(chunk["day"].encode("utf-8"), REDUCED_API_TIME_FORMAT).date()
+                    time_bin = datetime.strptime(chunk["day"], API_DATE_FORMAT).date()
                     data_exists = True
                     if first:
                         first_day = time_bin
@@ -300,7 +318,7 @@ def parse_processed_data(study_id, participant_objects, data_stream):
                         elif (time_bin - last_day).days > 0:
                             last_day = time_bin
                     # check to see if the data should be a float or an int
-                    if chunk[data_stream].encode("utf-8").find(".") == -1:
+                    if chunk[data_stream].find(".") == -1:
                         processed_data = int(chunk[data_stream])
                     else:
                         processed_data = float(chunk[data_stream])
@@ -312,7 +330,8 @@ def parse_processed_data(study_id, participant_objects, data_stream):
 
 
 def parse_patient_processed_data(study_id, participant):
-    """    create a list of dicts of processed data for one patient.
+    """
+    Create a list of dicts of processed data for one patient.
     [{"time_bin": , "processed_data": , "data_stream": ,}...]
     if there is no data for a patient, first_day and last_day will be None, and all_data will be an empty list
     """
@@ -324,7 +343,7 @@ def parse_patient_processed_data(study_id, participant):
     if pipeline_chunks is not None:
         for chunk in pipeline_chunks:
             if "day" in chunk:
-                time_bin = datetime.strptime(chunk["day"].encode("utf-8"), REDUCED_API_TIME_FORMAT).date()
+                time_bin = datetime.strptime(chunk["day"], API_DATE_FORMAT).date()
                 if first:
                     first_day = time_bin
                     last_day = time_bin
@@ -335,8 +354,8 @@ def parse_patient_processed_data(study_id, participant):
                     elif (time_bin - last_day).days > 0:
                         last_day = time_bin
                 for stream_key in chunk:
-                    if stream_key in processed_data_stream_dict and chunk[stream_key] != "NA":
-                        if chunk[stream_key].encode("utf-8").find(".") == -1:
+                    if stream_key in PROCESSED_DATA_STREAM_DICT and chunk[stream_key] != "NA":
+                        if chunk[stream_key].find(".") == -1:
                             processed_data = int(chunk[stream_key])
                         else:
                             processed_data = float(chunk[stream_key])
@@ -345,7 +364,6 @@ def parse_patient_processed_data(study_id, participant):
 
 
 def set_default_settings_post_request(study, data_stream):
-    # get all of the variables
     all_flags_list = request.form.get("all_flags_list", "[]")
     color_high_range = request.form.get("color_high_range", 0)
     color_low_range = request.form.get("color_low_range", 0)
@@ -362,14 +380,14 @@ def set_default_settings_post_request(study, data_stream):
         color_low_range = int(json.loads(color_low_range))
         color_high_range = int(json.loads(color_high_range))
 
+    # Should be unnecessary in in python?
     # make the operator a string
-    for flag in all_flags_list:
-        flag[0] = flag[0].encode("utf-8")
+    # for flag in all_flags_list:
+    #     flag[0] = flag[0].encode("utf-8")
 
     # try to get a DashboardColorSetting object and check if it exists
     if DashboardColorSetting.objects.filter(data_type=data_stream, study=study).exists():
-        # in this case, a default settings model already exists
-        # now we delete the inflections associated with it
+        # case: a default settings model already exists; delete the inflections associated with it
         settings = DashboardColorSetting.objects.get(data_type=data_stream, study=study)
         settings.inflections.all().delete()
         if settings.gradient_exists():
@@ -413,13 +431,6 @@ def set_default_settings_post_request(study, data_stream):
     return color_low_range, color_high_range, all_flags_list
 
 
-def get_study_or_404(study_id):
-    try:
-        return Study.objects.get(pk=study_id)
-    except Study.DoesNotExist:
-        return abort(404)
-
-
 def get_unique_dates(start, end, first_day, last_day, chunks=None):
     """ create a list of all the unique days in which data was recorded for this study """
     first_date_data_entry = None
@@ -441,22 +452,24 @@ def get_unique_dates(start, end, first_day, last_day, chunks=None):
         end = temp
 
     # unique_dates is all of the dates for the week we are showing
-    if start is None: # if start is none default to end
+    if start is None:  # if start is none default to end
         end_num = min((last_day - first_day).days + 1, 7)
         unique_dates = [(last_day - timedelta(days=end_num - 1)) + timedelta(days=date) for date in range(end_num)]
         # unique_dates = [(first_day + timedelta(days=date)) for date in range(end_num)]
-    elif end is None:  # if end if none default to 7 days
+    elif end is None:
+        # if end is none default to 7 days
         end_num = min((last_day - start.date()).days + 1, 7)
         unique_dates = [(start.date() + timedelta(days=date)) for date in range(end_num)]
     elif (start.date() - first_day).days < 0:
-        # this is the edge case for out of bounds at beginning to keep the duration the same
+        # case: out of bounds at beginning to keep the duration the same
         end_num = (end.date() - first_day).days + 1
         unique_dates = [(first_day + timedelta(days=date)) for date in range(end_num)]
     elif (last_day - end.date()).days < 0:
-        # this is the edge case for out of bounds at end to keep the duration the same
+        # case: out of bounds at end to keep the duration the same
         end_num = (last_day - start.date()).days + 1
         unique_dates = [(start.date() + timedelta(days=date)) for date in range(end_num)]
-    else:  # this is if they specify both start and end
+    else:
+        # case: if they specify both start and end
         end_num = (end.date() - start.date()).days + 1
         unique_dates = [(start.date() + timedelta(days=date)) for date in range(end_num)]
 
@@ -477,23 +490,23 @@ def create_next_past_urls(first_day, last_day, start=None, end=None):
         end = datetime.combine(last_day, datetime.min.time())
 
     if 0 < (start.date() - first_day).days < duration:
-        past_url = "?start=" + (start.date() - timedelta(days=(duration + 1))).strftime(REDUCED_API_TIME_FORMAT) + \
-                   "&end=" + (start.date() - timedelta(days=1)).strftime(REDUCED_API_TIME_FORMAT)
+        past_url = "?start=" + (start.date() - timedelta(days=(duration + 1))).strftime(API_DATE_FORMAT) + \
+                   "&end=" + (start.date() - timedelta(days=1)).strftime(API_DATE_FORMAT)
 
     elif (start.date() - first_day).days <= 0:
         past_url = ""
     else:
-        past_url = "?start=" + (start.date() - timedelta(days=duration + 1)).strftime(REDUCED_API_TIME_FORMAT) + \
-                    "&end=" + (start.date() - timedelta(days=1)).strftime(REDUCED_API_TIME_FORMAT)
+        past_url = "?start=" + (start.date() - timedelta(days=duration + 1)).strftime(API_DATE_FORMAT) + \
+                    "&end=" + (start.date() - timedelta(days=1)).strftime(API_DATE_FORMAT)
     if (last_day - timedelta(days=duration + 1)) < end.date() < (last_day - timedelta(days=1)):
-        next_url = "?start=" + (end.date() + timedelta(days=1)).strftime(REDUCED_API_TIME_FORMAT) + "&end=" + \
-                   (end.date() + timedelta(days=(duration + 1))).strftime(REDUCED_API_TIME_FORMAT)
+        next_url = "?start=" + (end.date() + timedelta(days=1)).strftime(API_DATE_FORMAT) + "&end=" + \
+                   (end.date() + timedelta(days=(duration + 1))).strftime(API_DATE_FORMAT)
     elif (last_day - end.date()).days <= 0:
         next_url = ""
     else:
         next_url = "?start=" + \
-                   (start.date() + timedelta(days=duration + 1)).strftime(REDUCED_API_TIME_FORMAT) + "&end=" + \
-                   (end.date() + timedelta(days=duration + 1)).strftime(REDUCED_API_TIME_FORMAT)
+                   (start.date() + timedelta(days=duration + 1)).strftime(API_DATE_FORMAT) + "&end=" + \
+                   (end.date() + timedelta(days=duration + 1)).strftime(API_DATE_FORMAT)
     return next_url, past_url
 
 
@@ -503,9 +516,9 @@ def get_bytes_data_stream_match(chunks, date, stream):
     for chunk in chunks:
         if (chunk["time_bin"]).date() == date and chunk["data_stream"] == stream:
             if all_bytes is None:
-                all_bytes = chunk.get("bytes", 0)
+                all_bytes = chunk.get("bytes", 0) or 0
             else:
-                all_bytes += chunk.get("bytes", 0)
+                all_bytes += chunk.get("bytes", 0) or 0
     if all_bytes is not None:
         return all_bytes
     else:
@@ -517,9 +530,9 @@ def get_bytes_participant_match(stream_data, date):
     for data_point in stream_data:
         if (data_point["time_bin"]).date() == date:
             if all_bytes is None:
-                all_bytes = data_point.get("bytes", 0)
+                all_bytes = data_point.get("bytes", 0) or 0
             else:
-                all_bytes += data_point.get("bytes", 0)
+                all_bytes += data_point.get("bytes", 0) or 0
     if all_bytes is not None:
         return all_bytes
     else:
@@ -545,7 +558,7 @@ def get_bytes_patient_processed_match(participant_data, date, stream):
     # stream for this participant
     if participant_data is not None:
         for data_point in participant_data:
-            if(data_point["time_bin"]) == date and data_point["data_stream"] == stream:
+            if (data_point["time_bin"]) == date and data_point["data_stream"] == stream:
                 return data_point["processed_data"]
     return None
 
@@ -611,9 +624,9 @@ def extract_date_args_from_request():
     end = request.values.get("end", None)
     try:
         if start:
-            start = datetime.strptime(start, REDUCED_API_TIME_FORMAT)
+            start = datetime.strptime(start, API_DATE_FORMAT)
         if end:
-            end = datetime.strptime(end, REDUCED_API_TIME_FORMAT)
+            end = datetime.strptime(end, API_DATE_FORMAT)
     except ValueError as e:
         return abort(400, DATETIME_FORMAT_ERROR)
 
@@ -634,11 +647,11 @@ def extract_flag_args_from_request():
     all_flags_string = request.values.get("flags", "")
     all_flags_list = []
     # parse to create a dict of flags
-    flags_seperated = all_flags_string.split('*')
-    for flag in flags_seperated:
+    flags_separated = all_flags_string.split('*')
+    for flag in flags_separated:
         if flag != "":
             flag_apart = flag.split(',')
-            string = flag_apart[0].encode("utf-8")
+            string = flag_apart[0]
             all_flags_list.append([string, int(flag_apart[1])])
     return all_flags_list
 
