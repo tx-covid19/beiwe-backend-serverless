@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Run Pipeline{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="/static/css/libraries/bootstrap-datetimepicker.css"  type="text/css"/>
+  <script type="text/javascript" src="../static/javascript/libraries/moment.min.js"></script>
+  <script type="text/javascript" src="../static/javascript/libraries/transition.js"></script>
+  <script type="text/javascript" src="../static/javascript/libraries/collapse.js"></script>
+  <script type="text/javascript" src="../static/javascript/libraries/bootstrap-datetimepicker-4.17.47.js"></script>
+
+{% endblock %}
+
+{% block content %}
+
+  <div class="container">
+    <div class="span12">
+      <div class="row">
+	      <h2>{{ username }} Job Queue</h2>
+      </div>
+    </div>
+    <table class="display" id="pipelines_list">
+      <thead>
+        <tr>
+          <th>Action</th>
+          <th>ID</th>
+          <th>Owner</th>
+          <th>Submission</th>
+          <th>State</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Duration (hours)</th>
+          <th>Error</th>
+          <th>Email address for status updates</th>
+        </tr>
+      </thead>
+      <tbody id="users-table-body">
+
+        {% for pipeline in pipelines %}
+          <tr>
+            <td>
+                {% if pipeline.execution_status == "queued" or pipeline.execution_status == "running" %}
+                    <form action="/terminate-pipeline/{{ pipeline.study.id }}" method="post">
+                        <div class="form-inline">
+                            <input type="hidden" name="pipeline_id" value="{{ pipeline.id }}">
+                            <button type="submit" class="btn btn-primary btn-sm reset_password_button">Terminate</button>
+                        </div>
+                    </form>
+                {% elif pipeline.execution_status == "completed" %}
+                    <button type="submit" class="btn btn-success btn-sm">Completed</button>
+                 {% else %}
+                    <button type="submit" class="btn btn-danger btn-sm">{{ pipeline.execution_status }}</button>
+                 {% endif %}
+            </td>
+            <td>
+              <b>{{ pipeline.id }}</b>
+            </td>
+            <td>
+              <b>{{ pipeline.researcher.username }}</b>
+            </td>
+            <td>
+              <b>{{ pipeline.pipeline_submission_timestamp }}</b>
+            </td>
+            <td>
+              <b>{{ pipeline.execution_status }}</b>
+            </td>
+            <td>
+              <b>{{ pipeline.execution_start_datetime }}</b>
+            </td>
+            <td>
+              <b>{{ pipeline.execution_end_datetime }}</b>
+            </td>
+            <td>
+		    <b>
+		       {% if pipeline.execution_time_minutes %}
+			    {{ "%.2f"|format(pipeline.execution_time_minutes) }}
+		       {% else %}
+			    None
+		       {% endif %}
+		    </b>
+            </td>
+            <td>
+              <b>{{ pipeline.execution_error_text }}</b>
+            </td>
+            <td>
+              <b>{{ pipeline.email_address_list }}</b>
+            </td>
+          </tr>
+        {% endfor %}
+
+      </tbody>
+    </table>
+
+  </div>
+
+{% endblock %}

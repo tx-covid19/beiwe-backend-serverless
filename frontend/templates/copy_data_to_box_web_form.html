@@ -28,16 +28,6 @@
         <form action="/submit-copy-request/v1" method="POST" id="data_download_parameters_form">
 
           <div class="form-group">
-            <label for="access_key">Access Key:</label>
-            <input type="text" name="access_key" id="access_key" class="form-control" placeholder="Paste your access key here" required>
-          </div>
-
-          <div class="form-group">
-            <label for="box_directory">Access Secret:</label>
-            <input type="text" name="access_secret" id="access_secret" class="form-control" placeholder="Paste your access secret name here" required>
-          </div>
-
-          <div class="form-group">
             <label for="email_address">Email address to send status information to:</label>
             <input type="text" name="email_address" id="email_address" class="form-control" placeholder="Paste your email address here" required>
           </div>
@@ -55,7 +45,7 @@
               <div class="form-group">
                 <label for="study_selector">Study</label>
                   {# TODO: it would be nice if this selected the first option by default #}
-                  <select class="form-control" name="study_pk" ng-model="selectedStudyId">
+                  <select class="form-control" name="study_id" ng-model="selectedStudyId">
                       <option value="" disabled>--- Select Study ---</option>
                     <option ng-repeat="study in allowedStudies | filter: {is_test: true}" value="{%raw%}{{ study.id }}{%endraw%}">{%raw%}{{ study.name }}{%endraw%}</option>
                   </select>
@@ -82,7 +72,8 @@
               </div>
             </div>
             <br>
-              {# Time Range #}
+
+            {# Time Range #}
             <div class="row">
             {# Start Datetime #}
             <div class="col-sm-4">
@@ -110,7 +101,9 @@
               </div>
             </div>
             </div>
-          <br><br>
+         <br><br>
+
+
 
           {# Hidden Input to tell Data Download API that this request came from the web form (not from the command-line) #}
           <input type="hidden" name="web_form" value="true">

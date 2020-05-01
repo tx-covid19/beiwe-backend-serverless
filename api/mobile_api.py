@@ -15,8 +15,9 @@ from libs.http_utils import determine_os_api
 from libs.logging import log_error
 from libs.s3 import get_client_private_key, get_client_public_key_string, s3_upload
 from libs.sentry import make_sentry_client
-from libs.user_authentication import (authenticate_user, authenticate_user_registration,
-    minimal_validation)
+from libs.user_authentication import (authenticate_user, authenticate_user_registration, minimal_validation)
+
+from database.study_models import ParticipantSurvey
 
 ################################################################################
 ############################# GLOBALS... #######################################
@@ -287,6 +288,30 @@ def contains_valid_extension(file_name):
 ################################# Download #####################################
 ################################################################################
 
+def get_surveys_for_participant(participant, requesting_os):
+
+    survey_json_list = []
+    for survey in ParticipantSurvey.objects.filter(participant=participant, deleted=False):
+
+        try:
+            survey_dict = survey.as_native_python()
+        except:
+            print("Could not decode survey {0} {1}".format(survey.object_id, survey.name))
+            raise
+
+        # Make the dict look like the old Mongolia-style dict that the frontend is expecting
+        survey_dict.pop('id')
+        survey_dict.pop('deleted')
+        survey_dict.pop('name')
+        survey_dict['_id'] = survey_dict.pop('object_id')
+
+        # Exclude image surveys for the Android app to avoid crashing it
+        if requesting_os == "ANDROID" and survey.survey_type == "image_survey":
+            pass
+        else:
+            survey_json_list.append(survey_dict)
+
+    return survey_json_list
 
 @mobile_api.route('/download_surveys', methods=['GET', 'POST'])
 @mobile_api.route('/download_surveys/ios/', methods=['GET', 'POST'])
@@ -295,4 +320,10 @@ def contains_valid_extension(file_name):
 def get_latest_surveys(OS_API=""):
     participant = Participant.objects.get(patient_id=request.values['patient_id'])
     study = participant.study
-    return json.dumps(study.get_surveys_for_study(requesting_os=OS_API))
+    surveys = study.get_surveys_for_study(requesting_os=OS_API)
+    pt_surveys = get_surveys_for_participant(participant, requesting_os=OS_API)
+    if pt_surveys:
+        surveys += pt_surveys
+    print("received get_survey {0}: returning {1} surveys".format(request.values, len(surveys)))
+    return json.dumps(surveys)
+

@@ -22,3 +22,10 @@ python-dateutil
 
 jinja2
 boxsdk
+
+# redcap
+PyCap
+
+# cors
+flask-cors
+

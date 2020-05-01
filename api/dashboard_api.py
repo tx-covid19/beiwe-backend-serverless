@@ -19,7 +19,7 @@ from config.settings import TIMEZONE
 dashboard_api = Blueprint('dashboard_api', __name__)
 
 DATETIME_FORMAT_ERROR = \
-    "Dates and times provided to this endpoint must be formatted like this: 2010-11-22 (%s)" % REDUCED_API_TIME_FORMAT
+    f"Dates and times provided to this endpoint must be formatted like this: 2010-11-22 ({REDUCED_API_TIME_FORMAT})"
 
 
 @dashboard_api.route("/dashboard/<string:study_id>", methods=["GET"])
@@ -27,13 +27,13 @@ DATETIME_FORMAT_ERROR = \
 def dashboard_page(study_id):
     study = get_study_or_404(study_id)
     """ information for the general dashboard view for a study"""
-    participants = list(Participant.objects.filter(study=study_id, device_id__isnull=False).\
+    participants = list(Participant.objects.filter(study=study_id, device_id__isnull=False).exclude(device_id='').\
             values_list("patient_id", flat=True).order_by('patient_id'))
 
     all_survey_streams = {}
     for survey in Survey.objects.filter(study=study_id):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.object_id} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
 
     ## update the total list of streams
     data_stream_dict = {}
@@ -131,7 +131,7 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     all_survey_streams = {}
     for survey in Survey.objects.filter(study=study_id):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.object_id} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
 
     data_stream_dict = {}
     data_stream_dict.update(complete_data_stream_dict)
@@ -812,7 +812,7 @@ def extract_data_stream_args_from_request():
     data_stream = request.values.get("data_stream", None)
     if data_stream:
         if data_stream not in ALL_DATA_STREAMS:
-            return abort(400, "unrecognized data stream '%s'" % data_stream)
+            return abort(400, f"unrecognized data stream '{data_stream}'")
     return data_stream
 
 
