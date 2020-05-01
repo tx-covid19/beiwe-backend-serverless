@@ -10,8 +10,8 @@ from flask_jwt_extended import JWTManager
 from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
-    mobile_api, participant_administration, survey_api, participant_auth, event_api, overview_api,
-                 tracker_api, refresh_api, redcap_api, fitbit_auth_api)
+                 mobile_api, participant_administration, survey_api, participant_auth, event_api, overview_api,
+                 tracker_api, refresh_api, redcap_api, fitbit_api)
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
@@ -54,7 +54,7 @@ app.register_blueprint(overview_api.overview_api, url_prefix='/user')
 app.register_blueprint(tracker_api.tracker_api, url_prefix='/user')
 app.register_blueprint(refresh_api.refresh_api, url_prefix='/refresh')
 app.register_blueprint(redcap_api.redcap_api, url_prefix='/redcap')
-app.register_blueprint(fitbit_auth_api.fitbit_auth_api, url_prefix='/fitbit')
+app.register_blueprint(fitbit_api.fitbit_api, url_prefix='/fitbit')
 
 
 # Don't set up Sentry for local development
