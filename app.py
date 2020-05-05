@@ -10,12 +10,15 @@ from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api, external_api,
     mobile_api, participant_administration, survey_api, redcap_api)
-from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN, DOMAIN_NAME, BEIWE_SUBDOMAIN, DIGITAL_SELFIE_SUBDOMAIN
+from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN, DOMAIN_NAME, BEIWE_SUBDOMAIN, DIGITAL_SELFIE_SUBDOMAIN, BEIWE_ROOT_DOMAIN, CDN_DOMAIN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
 from pages import (admin_pages, data_access_web_form, mobile_pages, survey_designer,
     system_admin_pages, digital_selfie_web_form)
 
+from flask_cdn import CDN, url_for
+
+cdn = CDN()
 
 def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static", subdomain_matching=True)
@@ -25,14 +28,21 @@ def subdomain(directory):
     app.wsgi_app = ProxyFix(app.wsgi_app)
 
     app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+    app.config['CDN_DOMAIN'] = CDN_DOMAIN
+
+    cdn.init_app(app)
+    print(app.config['CDN_DOMAIN'])
+
     return app
 
 
 # Register pages here
-print(f'Configuring {DOMAIN_NAME} with {BEIWE_SUBDOMAIN} and {DIGITAL_SELFIE_SUBDOMAIN}')
+print(f'Configuring {BEIWE_ROOT_DOMAIN} with {BEIWE_SUBDOMAIN} and {DIGITAL_SELFIE_SUBDOMAIN}, static loaded from {CDN_DOMAIN}')
 
 app = subdomain("frontend")
-app.config['SERVER_NAME'] = DOMAIN_NAME
+app.config['SERVER_NAME'] = BEIWE_ROOT_DOMAIN
+app.config['CDN_DOMAIN'] = CDN_DOMAIN
+
 app.jinja_env.globals['current_year'] = datetime.now().strftime('%Y')
 app.register_blueprint(external_api.external_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(mobile_api.mobile_api, subdomain=BEIWE_SUBDOMAIN)
