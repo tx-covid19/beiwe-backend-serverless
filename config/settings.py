@@ -20,6 +20,7 @@ S3_BUCKET = getenv("S3_BUCKET")
 DOMAIN_NAME = getenv("DOMAIN_NAME")
 BEIWE_SUBDOMAIN = getenv("BEIWE_SUBDOMAIN")
 DIGITAL_SELFIE_SUBDOMAIN = getenv("DIGITAL_SELFIE_SUBDOMAIN")
+FITBIT_SUBDOMAIN = getenv("FITBIT_SUBDOMAIN")
 
 # A list of email addresses that will receive error emails. This value must be a
 # comma separated list; whitespace before and after addresses will be stripped.
@@ -54,5 +55,4 @@ PIPELINE_SG = getenv('PIPELINE_SG')
 # Redcap credentials
 REDCAP_SERVER_URL = getenv('REDCAP_SERVER_URL')
 REDCAP_API_TOKEN = getenv('REDCAP_API_TOKEN')
-
 

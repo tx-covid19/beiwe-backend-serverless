@@ -1,15 +1,18 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import jinja2
 from flask import Flask, redirect, render_template
 from raven.contrib.flask import Sentry
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_jwt_extended import JWTManager
 
 from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api, external_api,
-    mobile_api, participant_administration, survey_api, redcap_api)
+                 mobile_api, participant_administration, survey_api, redcap_api, survey_api,
+                 participant_auth, event_api, overview_api, tracker_api, refresh_api, fitbit_api)
+
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN, DOMAIN_NAME, BEIWE_SUBDOMAIN, DIGITAL_SELFIE_SUBDOMAIN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
@@ -20,6 +23,10 @@ from pages import (admin_pages, data_access_web_form, mobile_pages, survey_desig
 def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static", subdomain_matching=True)
     set_secret_key(app)
+    app.config['JWT_SECRET_KEY'] = app.secret_key
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=5)
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=7)
+    jwt = JWTManager(app)
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
     app.jinja_loader = jinja2.ChoiceLoader(loader)
     app.wsgi_app = ProxyFix(app.wsgi_app)
@@ -29,7 +36,7 @@ def subdomain(directory):
 
 
 # Register pages here
-print(f'Configuring {DOMAIN_NAME} with {BEIWE_SUBDOMAIN} and {DIGITAL_SELFIE_SUBDOMAIN}')
+print(f'Configuring {DOMAIN_NAME} with {BEIWE_SUBDOMAIN}, {DIGITAL_SELFIE_SUBDOMAIN}, {FITBIT_SUBDOMAIN}')
 
 app = subdomain("frontend")
 app.config['SERVER_NAME'] = DOMAIN_NAME
@@ -50,6 +57,7 @@ app.register_blueprint(data_pipeline_api.data_pipeline_api, subdomain=BEIWE_SUBD
 app.register_blueprint(dashboard_api.dashboard_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(redcap_api.redcap_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(digital_selfie_web_form.digital_selfie_web_form, subdomain=DIGITAL_SELFIE_SUBDOMAIN)
+app.register_blueprint(fitbit_api.fitbit_api, subdomain=FITBIT_SUBDOMAIN)
 
 # Don't set up Sentry for local development
 if os.environ['DJANGO_DB_ENV'] != 'local':
