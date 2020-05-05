@@ -2,14 +2,14 @@
 <html>
   <head>
     <title>Rendered graph for user</title>
-    <link rel="stylesheet" href="/static/css/phone-jqplot.css">
-    <script type="text/javascript" src="/static/javascript/jquery-1.11.1.js"></script>
-    <script type="text/javascript" src="/static/javascript/jqplot/jquery.jqplot.min.js"></script>
-    <script type="text/javascript" src="/static/javascript/jqplot/plugins/jqplot.canvasAxisLabelRenderer.min.js"></script>
-    <script type="text/javascript" src="/static/javascript/jqplot/plugins/jqplot.canvasTextRenderer.min.js"></script>
-    <script type="text/javascript" src="/static/javascript/jqplot/plugins/jqplot.canvasAxisTickRenderer.min.js"></script>
-    <script type="text/javascript" src="/static/javascript/jqplot/plugins/jqplot.highlighter.min.js"></script>
-    <script type="text/javascript" src="/static/javascript/graph.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/phone-jqplot.css') }}">
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/jquery-1.11.1.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/jqplot/jquery.jqplot.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/jqplot/plugins/jqplot.canvasAxisLabelRenderer.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/jqplot/plugins/jqplot.canvasTextRenderer.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/jqplot/plugins/jqplot.canvasAxisTickRenderer.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/jqplot/plugins/jqplot.highlighter.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/graph.js') }}"></script>
   </head>
   <body>
     <div id="chart1" style="margin-top:20px; margin-left:20px; width:400px; height:400;"></div>

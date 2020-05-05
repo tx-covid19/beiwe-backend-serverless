@@ -4,7 +4,7 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="/static/css/survey_builder.css"  type="text/css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/survey_builder.css') }}"  type="text/css"/>
   <style>
     @media (min-width: 768px) {
       .modal-dialog {
@@ -33,17 +33,24 @@
     var imageSurvey = ('{{ survey.survey_type }}' == "image_survey");
     var always_available = settings.always_available || false;
   </script>
-  <script src="/static/javascript/survey-editor/schedule.js"></script>
-  <script src="/static/javascript/survey-editor/survey-editor.js"></script>
-  <script src="/static/javascript/app/survey-builder/constants.js"></script>
-  <script src="/static/javascript/app/survey-builder/services.js"></script>
-  <script src="/static/javascript/app/survey-builder/directives/tooltip/tooltip.js"></script>
-  <script src="/static/javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.js"></script>
-  <script src="/static/javascript/app/survey-builder/directives/conditional-block/conditional-block.js"></script>
-  <script src="/static/javascript/app/survey-builder/directives/logical-block/logical-block.js"></script>
-  <script src="/static/javascript/app/survey-builder/directives/edit-question/edit-question.js"></script>
-  <script src="/static/javascript/app/survey-builder/directives/question-summary/question-summary.js"></script>
-  <script src="/static/javascript/app/survey-builder/controllers/survey-builder-controller.js"></script>
+	<script src="{{ url_for('static', filename='javascript/survey-editor/schedule.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/survey-editor/survey-editor.js') }}"></script>
+	<!-- <script src="/static/javascript/app/survey-builder/constants.js"></script>
+	     <script src="/static/javascript/app/survey-builder/services.js"></script>
+	     <script src="/static/javascript/app/survey-builder/directives/tooltip/tooltip.js"></script>
+	     <script src="/static/javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.js"></script>
+	     <script src="/static/javascript/app/survey-builder/directives/conditional-block/conditional-block.js"></script>
+	     <script src="/static/javascript/app/survey-builder/directives/logical-block/logical-block.js"></script>
+	     <script src="/static/javascript/app/survey-builder/directives/edit-question/edit-question.js"></script>
+	     <script src="/static/javascript/app/survey-builder/directives/question-summary/question-summary.js"></script> -->
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/constants.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/services.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/tooltip/tooltip.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/conditional-block/conditional-block.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/logical-block/logical-block.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/edit-question/edit-question.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/survey-builder-controller.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -182,4 +189,14 @@
 
     </div>
   </div>
+
+	<script>
+		angular.module("surveyBuilder")
+                    .directive("questionSummary", ['$sce', function($sce) {
+                        return {
+                            "restrict": "E",
+				"templateUrl": $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/question-summary/question-summary.html') }}")
+                        };
+                    }]);
+	</script>
 {% endblock %}

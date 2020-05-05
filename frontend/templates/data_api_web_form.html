@@ -4,17 +4,17 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="/static/css/libraries/bootstrap-datetimepicker.css"  type="text/css"/>
-  <script type="text/javascript" src="../static/javascript/libraries/moment.min.js"></script>
-  <script type="text/javascript" src="../static/javascript/libraries/transition.js"></script>
-  <script type="text/javascript" src="../static/javascript/libraries/collapse.js"></script>
-  <script type="text/javascript" src="../static/javascript/libraries/bootstrap-datetimepicker-4.17.47.js"></script>
-  <script type="text/javascript" src="../static/javascript/data_download_page.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap-datetimepicker.css') }}"  type="text/css"/>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/moment.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/transition.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/collapse.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/bootstrap-datetimepicker-4.17.47.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/data_download_page.js') }}"></script>
   <script>
     var allowedStudies = {{ allowed_studies|safe }};
     var participantsByStudy = {{ users_by_study|safe }};
   </script>
-  <script src="/static/javascript/app/survey-builder/controllers/data-access-web-form-controller.js"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/data-access-web-form-controller.js') }}"></script>
 {% endblock %}
 
 {% block content %}

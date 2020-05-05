@@ -3,13 +3,13 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="/static/css/dashboard_pages.css"  type="text/css"/>
-  <link rel="stylesheet" href="/static/css/libraries/bootstrap-datetimepicker.css"  type="text/css"/>
-  <script type="text/javascript" src="/static/javascript/libraries/moment.min.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/transition.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/collapse.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/bootstrap-datetimepicker-4.17.47.js"></script>
-  <script src="/static/javascript/dashboard_features.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard_pages.css') }}"  type="text/css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap-datetimepicker.css') }}"  type="text/css"/>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/moment.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/transition.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/collapse.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/bootstrap-datetimepicker-4.17.47.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/dashboard_features.js') }}"></script>
   <script type="text/javascript">
     window.color_high_range = null;
     window.color_low_range = null;

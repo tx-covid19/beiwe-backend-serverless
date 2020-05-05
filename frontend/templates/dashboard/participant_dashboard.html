@@ -3,14 +3,14 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="/static/css/dashboard_pages.css"  type="text/css"/>
-  <link rel="stylesheet" href="/static/css/libraries/bootstrap-datetimepicker.css"  type="text/css"/>
-  <script type="text/javascript" src="/static/javascript/libraries/moment.min.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/transition.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/collapse.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/bootstrap-datetimepicker-4.17.47.js"></script>
-  <script src="/static/javascript/patient_dashboard_features.js"></script>
-  <script type="text/javascript">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard_pages.css') }}"  type="text/css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap-datetimepicker.css') }}"  type="text/css"/>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/moment.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/transition.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/collapse.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/bootstrap-datetimepicker-4.17.47.js') }}"></script>
+        <script type="text/javascript" src="{{ url_for('static', filename='javascript/patient_dashboard_features.js') }}"></script>
+	<script type="text/javascript">
     {% if first_date_data and last_date_data %}
       window.first_day = new Date({{ first_date_data.year}}, {{first_date_data.month - 1}}, {{first_date_data.day }});
       window.last_day = new Date({{ last_date_data.year}}, {{last_date_data.month - 1}}, {{last_date_data.day }});

@@ -1,19 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <link rel="icon" href="./static/assets/img/favicons/favicon-32x32.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <meta name="description" content="Upload your screenshots">
     <meta name="author" content="Cameron Craddock">
-    <link rel="stylesheet" href="./static/css/sticky-footer.css">
-    <link rel="stylesheet" href="./static/css/bootstrap-4.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sticky-footer.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-4.min.css') }}">
     <title>Upload your digital selfie!</title>
 
-    <link rel="icon" href="./static/images/cropped-Slide1-32x32.jpg" sizes="32x32" />
-    <link rel="icon" href="./static/images/cropped-Slide1-192x192.jpg" sizes="192x192" />
-    <link rel="apple-touch-icon" href="./static/images/cropped-Slide1-180x180.jpg" />
-    <meta name="msapplication-TileImage" content="./static/images/cropped-Slide1-270x270.jpg" />
+    <link rel="icon" href="{{ url_for('static', filename='images/cropped-Slide1-32x32.jpg') }}" sizes="32x32" />
+    <link rel="icon" href="{{ url_for('static', filename='images/cropped-Slide1-192x192.jpg') }}" sizes="192x192" />
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/cropped-Slide1-180x180.jpg') }}" />
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='images/cropped-Slide1-270x270.jpg') }}" />
 </head>
 
 <body>
@@ -121,9 +120,9 @@
         </div>
     </footer>
 
-    <script src="./static/javascript/libraries/jquery-3.5.0.min.js"></script>
-    <script src="./static/javascript/libraries/popper.js"></script>
-    <script src="./static/javascript/libraries/bootstrap-4.min.js"></script>
+	<script src="{{ url_for('static', filename='javascript/libraries/jquery-3.5.0.min.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/libraries/popper.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/libraries/bootstrap-4.min.js') }}"></script>
     <script type="text/javascript">
 
         $(document).ready(function () {
