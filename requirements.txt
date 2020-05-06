@@ -37,4 +37,4 @@ PyCap~=0.0.0
 flask-cors
 
 # fitbit
-fitbit~=0.3.1
+git+https://github.com/anibalsolon/python-fitbit.git@feature/friends_api_update#egg=fitbit
