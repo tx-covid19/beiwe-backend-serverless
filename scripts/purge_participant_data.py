@@ -87,10 +87,11 @@ def setup():
     all_patients_exist = True
     for patient_id, _ in sorted_data:
         if not Participant.objects.filter(patient_id=patient_id).exists():
-            all_patients_exist = False
+            #all_patients_exist = False
             print("Participant '%s' does not exist." % patient_id)
-    if not all_patients_exist:
-        exit(1)
+            sorted_data.remove((patient_id, _))
+    #if not all_patients_exist:
+        #exit(1)
 
 
     # print out info for confirmation
@@ -156,7 +157,11 @@ def assemble_deletable_files(sorted_data):
     deletable_file_paths = []
 
     for patient_id, expunge_start_date in sorted_data:
-        participant = Participant.objects.get(patient_id=patient_id)
+        try:
+            participant = Participant.objects.get(patient_id=patient_id)
+        except:
+            print('Participant DNE?')
+            continue
 
         # technically it is a datetime object
         if expunge_start_date == 'all':
