@@ -74,10 +74,10 @@ class Study(AbstractModel):
         return survey_json_list
 
     def get_survey_ids_for_study(self, survey_type='tracking_survey'):
-        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', flat=True)
+        return self.surveys.filter(survey_type=survey_type).exclude(deleted=True).values_list('id', flat=True)
 
     def get_survey_ids_and_object_ids_for_study(self, survey_type='tracking_survey'):
-        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', 'object_id', 'name')
+        return self.surveys.filter(survey_type=survey_type).exclude(deleted=True).values_list('id', 'object_id', 'name')
 
     def get_study_device_settings(self):
         return self.device_settings
