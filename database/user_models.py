@@ -108,6 +108,15 @@ class Participant(AbstractPasswordUser):
     study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='participants', null=False)
 
     @classmethod
+    def create(cls, password, **kwargs):
+        """
+        Creates a new participant with randomly generated patient_id and password.
+        """
+        participant = cls(**kwargs)
+        participant.set_password(password)
+        return participant
+
+    @classmethod
     def create_with_password(cls, **kwargs):
         """
         Creates a new participant with randomly generated patient_id and password.

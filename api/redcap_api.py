@@ -12,16 +12,13 @@ redcap_api = Blueprint('redcap_api', __name__)
 EXPECTED_INSTRUMENT_NAME = 'online_consent_form'
 
 
-@redcap_api.route('/user/redcap', methods=['POST'])
+@redcap_api.route('/handler', methods=['POST'])
 def redcap_handler():
     instrument = request.form.get('instrument', '')
     instrument_completed = request.form.get(EXPECTED_INSTRUMENT_NAME + '_complete', '')
     event_user = request.form.get('username', '')
 
-    print(request.form)
-
     if instrument != EXPECTED_INSTRUMENT_NAME or instrument_completed != '2' or event_user != '[survey respondent]':
-        print('ignoring request 200')
         return jsonify({'msg': 'Request ignored.'}), 200
 
     study_id = request.args.get('study_id', '')
@@ -29,31 +26,25 @@ def redcap_handler():
     access_secret = request.args.get('access_secret', '')
 
     if not study_id:
-        print('no study id 400')
         return jsonify({'msg': 'No study ID supplied.'}), 400
 
     try:
         researcher = Researcher.objects.get(access_key_id=access_key)
     except Researcher.DoesNotExist:
-        print("researcher not found 403")
         return jsonify({'msg': 'No access.'}), 403
 
     if not researcher.site_admin and not StudyRelation.objects.filter(study_id=study_id, researcher=researcher).exists():
-        print("not authorized 403")
         return jsonify({'msg': 'Not authorized for this study.'}), 403
 
     if not researcher.validate_access_credentials(access_secret):
-        print("access secret 403")
         return jsonify({'msg': 'Wrong secrets.'}), 403
 
     record_id = request.form.get('record', '')
 
     if not record_id:
-        print('no record id 400')
         return jsonify({'msg': 'Missing record information'}), 400
 
     if RedcapRecord.objects.filter(record_id__exact=record_id).exists():
-        print('record id already exists 400')
         return jsonify({'msg': 'User exists'}), 304
 
     # create beiwe user and write credentials back to Redcap
@@ -62,7 +53,6 @@ def redcap_handler():
         records = project.export_records(records=[record_id])
 
         if not records:
-            print('records not found 400')
             return jsonify({'msg': 'Records not found.'}), 400
 
         record = records[0]
@@ -82,7 +72,5 @@ def redcap_handler():
             return jsonify({'msg': 'Failed to update RedCap.'}), 304
 
         return jsonify({'msg': 'User created'}), 201
-    except Exception as e:
-        print('failed to create user 400')
-        print(e)
+    except:
         return jsonify({'msg': 'Failed to create user'}), 400

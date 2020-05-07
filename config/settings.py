@@ -21,6 +21,7 @@ DOMAIN_NAME = getenv("DOMAIN_NAME")
 BEIWE_ROOT_DOMAIN = getenv("BEIWE_ROOT_DOMAIN")
 BEIWE_SUBDOMAIN = getenv("BEIWE_SUBDOMAIN")
 DIGITAL_SELFIE_SUBDOMAIN = getenv("DIGITAL_SELFIE_SUBDOMAIN")
+FITBIT_SUBDOMAIN = getenv("FITBIT_SUBDOMAIN")
 
 # A list of email addresses that will receive error emails. This value must be a
 # comma separated list; whitespace before and after addresses will be stripped.

@@ -9,7 +9,12 @@ from .profiling_models import *
 from .data_access_models import *
 from .system_integrations import *
 from .pipeline_models import *
+from .event_models import *
+from .info_models import *
+from .tracker_models import *
+from .userinfo_models import *
 from .redcap_models import *
+from .fitbit_models import *
 
 
 def get_and_summarize(patient_id: str):

@@ -2,8 +2,7 @@
 Django==1.11.23
 Flask>=1.1.1
 
-#pycryptodome>=3.9.0
-pycrypto
+pycryptodome>=3.9.0
 
 # error reporting
 raven[flask]>=6.8.0
@@ -14,18 +13,28 @@ cronutils>=0.2.1
 psycopg2-binary
 
 # Keep these dependencies up to date
-boto3
-pytz
+boto3~=1.12.39
+pytz~=2019.3
 ipython
 django-extensions
+djangorestframework==3.11.0
+Flask-JWT-Extended==3.24.1
+requests==2.23.0
 python-dateutil
-
+Werkzeug~=1.0.1
+us~=1.0.0
+zipcodes~=1.1.0
+PyGithub~=1.47
+botocore~=1.15.39
+iso3166~=1.0.1
 jinja2
 boxsdk
 
 # redcap
-PyCap
+PyCap~=0.0.0
 
 # cors
 flask-cors
 
+# fitbit
+git+https://github.com/anibalsolon/python-fitbit.git@feature/friends_api_update#egg=fitbit
