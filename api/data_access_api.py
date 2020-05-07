@@ -107,7 +107,7 @@ def get_and_validate_researcher(study):
     except Researcher.DoesNotExist:
         return abort(403)  # access key DNE
 
-    if not StudyRelation.objects.filter(study_id=study.pk, researcher=researcher).exists():
+    if not researcher.site_admin and not StudyRelation.objects.filter(study_id=study.pk, researcher=researcher).exists():
         return abort(403)  # researcher is not credentialed for this study
 
     if not researcher.validate_access_credentials(access_secret):
