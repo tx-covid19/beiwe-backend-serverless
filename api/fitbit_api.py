@@ -2,7 +2,7 @@ import base64
 from collections import defaultdict
 from datetime import datetime
 
-import fitbit
+# import fitbit
 import requests
 from flask import Blueprint, redirect, request, jsonify
 from flask_jwt_extended import jwt_required, decode_token
