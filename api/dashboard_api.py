@@ -31,9 +31,9 @@ def dashboard_page(study_id):
             values_list("patient_id", flat=True).order_by('patient_id'))
 
     all_survey_streams = {}
-    for survey in Survey.objects.filter(study=study_id):
+    for survey in Survey.objects.filter(study=study_id).exclude(deleted=True):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     ## update the total list of streams
     data_stream_dict = {}
@@ -129,9 +129,9 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
 
     # calculate stream names for the study's surveys
     all_survey_streams = {}
-    for survey in Survey.objects.filter(study=study_id):
+    for survey in Survey.objects.filter(study=study_id).exclude(deleted=True):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     data_stream_dict = {}
     data_stream_dict.update(complete_data_stream_dict)
@@ -251,9 +251,9 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
 
     # calculate stream names for the study's surveys
     all_survey_streams = {}
-    for survey in Survey.objects.filter(study=study_id):
+    for survey in Survey.objects.filter(study=study_id).exclude(deleted=True):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.object_id} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     ## update the total list of streams
     data_stream_dict = {}
