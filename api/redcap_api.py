@@ -12,13 +12,14 @@ redcap_api = Blueprint('redcap_api', __name__)
 EXPECTED_INSTRUMENT_NAME = 'online_consent_form'
 
 
-@redcap_api.route('/handler', methods=['POST'])
+@redcap_api.route('/user/redcap', methods=['POST'])
 def redcap_handler():
     instrument = request.form.get('instrument', '')
     instrument_completed = request.form.get(EXPECTED_INSTRUMENT_NAME + '_complete', '')
     event_user = request.form.get('username', '')
 
     if instrument != EXPECTED_INSTRUMENT_NAME or instrument_completed != '2' or event_user != '[survey respondent]':
+        print(f'redcap ignoring reqeust {instrument} {instrument_completed} {event_user}')
         return jsonify({'msg': 'Request ignored.'}), 200
 
     study_id = request.args.get('study_id', '')
@@ -45,6 +46,7 @@ def redcap_handler():
         return jsonify({'msg': 'Missing record information'}), 400
 
     if RedcapRecord.objects.filter(record_id__exact=record_id).exists():
+        print(f'record for this redcap id already exists')
         return jsonify({'msg': 'User exists'}), 304
 
     # create beiwe user and write credentials back to Redcap
@@ -68,7 +70,10 @@ def redcap_handler():
         record['beiwe_username'] = patient_id
         record['beiwe_password'] = password
         response = project.import_records([record])
+        print(response)
+
         if response['count'] != 1:
+            print(f'failed to update redcap, {response}!!')
             return jsonify({'msg': 'Failed to update RedCap.'}), 304
 
         return jsonify({'msg': 'User created'}), 201
