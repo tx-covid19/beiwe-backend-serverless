@@ -3,13 +3,18 @@ from datetime import datetime
 
 import jinja2
 from flask import Flask, redirect, render_template
+from flask_cors import CORS
 from raven.contrib.flask import Sentry
 from werkzeug.middleware.proxy_fix import ProxyFix
-
+from flask_jwt_extended import (
+    JWTManager, jwt_required, create_access_token,
+    get_jwt_identity
+)
 from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
     mobile_api, participant_administration, survey_api)
+from api.mindlogger import mlogger_user_api, applet_api, response_api, schedule_api, push_notification_api
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
@@ -19,7 +24,12 @@ from pages import (admin_pages, data_access_web_form, mobile_pages, survey_desig
 
 def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static")
+    CORS(app)
     set_secret_key(app)
+    app.config['JWT_SECRET_KEY'] = 'thisisascret'
+    app.config['JWT_HEADER_NAME'] = 'Girder-Token'
+    app.config['JWT_HEADER_TYPE'] = ''
+    jwt = JWTManager(app)
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
     app.jinja_loader = jinja2.ChoiceLoader(loader)
     app.wsgi_app = ProxyFix(app.wsgi_app)
@@ -42,7 +52,11 @@ app.register_blueprint(data_access_web_form.data_access_web_form)
 app.register_blueprint(copy_study_api.copy_study_api)
 app.register_blueprint(data_pipeline_api.data_pipeline_api)
 app.register_blueprint(dashboard_api.dashboard_api)
-
+app.register_blueprint(mlogger_user_api.user_api, url_prefix='/api/v1/user')
+app.register_blueprint(applet_api.applet_api, url_prefix='/api/v1/applet')
+app.register_blueprint(response_api.response_api, url_prefix='/api/v1/response')
+app.register_blueprint(schedule_api.schedule_api, url_prefix='/api/v1/schedule')
+app.register_blueprint(push_notification_api.push_notification_api)
 
 # Don't set up Sentry for local development
 if os.environ['DJANGO_DB_ENV'] != 'local':
