@@ -37,9 +37,9 @@ class EverythingWentFine(Exception): pass
 class ProcessingOverlapError(Exception): pass
 
 file_processing_func = {
-            SURVEY_TIMINGS: process_survey_timings_data,
-            ANDROID_LOG_FILE: process_android_log_data,
-        }
+    SURVEY_TIMINGS: process_survey_timings_data,
+    ANDROID_LOG_FILE: process_android_log_data,
+}
 
 """########################## Hourly Update Tasks ###########################"""
 
