@@ -10,8 +10,8 @@ import subprocess
 import boto3
 from botocore.exceptions import ClientError
 
-from .script_helpers import set_default_region
-from .configuration_getters import get_pipeline_folder, get_configs_folder, get_aws_object_names
+from script_helpers import set_default_region
+from configuration_getters import get_pipeline_folder, get_configs_folder, get_aws_object_names
 
 
 def run():
@@ -79,7 +79,7 @@ def run():
     # Push the docker file to our new repository
     # FIXME: using get-login is not ideal because it puts the password in process lists
     ecr_login = subprocess.check_output(['aws', 'ecr', 'get-login', '--no-include-email'])
-    ecr_login_as_list = ['sudo'] + ecr_login.strip('\n').split(' ')
+    ecr_login_as_list = ['sudo'] + ecr_login.decode("utf-8").strip('\n').split(' ')
     subprocess.check_call(ecr_login_as_list)
     subprocess.check_call(['sudo', 'docker', 'push', repo_uri])
     print('Docker pushed')

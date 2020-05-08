@@ -1,5 +1,5 @@
 # core libraries
-Django==1.11.23
+Django==1.11.28
 Flask>=1.1.1
 
 #pycryptodome>=3.9.0
@@ -7,7 +7,7 @@ pycrypto
 
 # error reporting
 raven[flask]>=6.8.0
-cronutils>=0.2.1
+cronutils>=0.2.3
 
 # server requirement
 psycopg2==2.8.3
