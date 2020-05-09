@@ -2,7 +2,7 @@ from multiprocessing.pool import ThreadPool
 from zipfile import ZipFile, ZIP_STORED
 
 from datetime import datetime
-from flask import Blueprint, request, abort, json, Response
+from flask import Blueprint, request, abort, json, Response, redirect, flash, Markup
 
 # noinspection PyUnresolvedReferences
 from config import load_django
@@ -18,13 +18,21 @@ from libs.streaming_bytes_io import StreamingBytesIO
 
 from database.data_access_models import PipelineUpload, InvalidUploadParameterError, \
     PipelineUploadTags
-
+from pipeline.index import create_one_job
+from boxsdk import OAuth2, Client
+from config.settings import BOX_clientID, BOX_clientSecret, BOX_enterpriseID, BOX_registration_callback
+from libs.admin_authentication import get_session_researcher, authenticate_researcher_study_access
 # Data Notes
 # The call log has the timestamp column as the 3rd column instead of the first.
 # The Wifi and Identifiers have timestamp in the file name.
 # The debug log has many lines without timestamps.
 
 data_access_api = Blueprint('data_access_api', __name__)
+
+sdk = OAuth2(
+    client_id=BOX_clientID,
+    client_secret=BOX_clientSecret
+)
 
 class DummyError(Exception): pass
 
@@ -51,7 +59,7 @@ def get_and_validate_study_id(chunked_download=False):
 
     if not override_for_batch and not study.is_test and chunked_download:
         # You're only allowed to download chunked data from test studies
-        print("study '%s' does not allow raw data download." % study.name)
+        print(f"study '{study.name}' does not allow raw data download.")
         return abort(404)
     else:
         return study
@@ -67,7 +75,7 @@ def _get_study_or_abort_404(study_object_id, study_pk):
         try:
             study = Study.objects.get(object_id=study_object_id)
         except Study.DoesNotExist:
-            print("study '%s' does not exist." % study_object_id)
+            print(f"study '{study_object_id}' does not exist.")
             return abort(404)
         else:
             return study
@@ -76,7 +84,7 @@ def _get_study_or_abort_404(study_object_id, study_pk):
         try:
             study = Study.objects.get(pk=study_pk)
         except Study.DoesNotExist:
-            print("study '%s' does not exist." % study_pk)
+            print(f"study '{study_pk}' does not exist.")
             return abort(404)
         else:
             return study
@@ -99,7 +107,7 @@ def get_and_validate_researcher(study):
     except Researcher.DoesNotExist:
         return abort(403)  # access key DNE
 
-    if not StudyRelation.objects.filter(study_id=study.pk, researcher=researcher).exists():
+    if not researcher.site_admin and not StudyRelation.objects.filter(study_id=study.pk, researcher=researcher).exists():
         return abort(403)  # researcher is not credentialed for this study
 
     if not researcher.validate_access_credentials(access_secret):
@@ -143,13 +151,13 @@ def get_users_in_study():
     study_object_id = request.values.get("study_id", "")
     # if not is_object_id(study_object_id):
     if not is_object_id(study_object_id):
-        print("provided object id '%s' is not an object id" % study_object_id)
+        print(f"provided object id '{study_object_id}' is not an object id")
         return abort(404)
 
     try:
         study = Study.objects.get(object_id=study_object_id)
     except Study.DoesNotExist:
-        print("study '%s' does not exist" % study_object_id)
+        print(f"study '{study_object_id}' does not exist")
         return abort(404)
 
     get_and_validate_researcher(study)
@@ -202,6 +210,64 @@ def get_data():
         )
 
 
+@data_access_api.route("/submit-copy-request/v1", methods=['POST', "GET"])
+@authenticate_researcher_study_access
+def submit_copy_request():
+    """ Required: access key, access secret, study_id
+    JSON blobs: data streams, users - default to all
+    Strings: date-start, date-end - format as "YYYY-MM-DDThh:mm:ss"
+    optional: top-up = a file (registry.dat)
+    cases handled:
+        missing creds or study, invalid researcher or study, researcher does not have access
+        researcher creds are invalid
+        (Flask automatically returns a 400 response if a parameter is accessed
+        but does not exist in request.values() )
+    Returns a zip file of all data files found by the query. """
+
+    study = Study.objects.get(pk=request.values.get("study_id"))
+    if not study:
+        print(f'Could not find study for {request.values.get("study_id")}')
+        return abort(404)
+
+    session_researcher = get_session_researcher()
+
+    query = {'email_address': request.values['email_address'],
+             'box_directory': request.values['box_directory'],
+             'study_id': request.values['study_id'],
+    }
+
+    determine_users_for_db_query(query)  # select users
+
+    determine_data_streams_for_db_query(query)
+
+    print(f'submitting data copy request {query}')
+
+    # If the request is from the web form we need to indicate that it is an attachment,
+    # and don't want to create a registry file.
+    # Oddly, it is the presence of  mimetype=zip that causes the streaming response to actually stream.
+    msg = f"Copy request submitted, status emails will be sent to {request.values['email_address']}"
+
+    create_one_job('manually',
+                   study.object_id,
+                   session_researcher.username,
+                   'copy_to_box',
+                   destination_email_addresses=query['email_address'],
+                   participants=query['user_ids'],
+                   datastreams=query['data_types'],
+                   job_type='copy_to_box',
+                   box_directory=query['box_directory'],
+                   webserver=True)
+
+    if 'web_form' in request.values:
+        flash(Markup(msg), 'success')
+        return redirect("/copy_data_to_box_form")
+    else:
+        return Response(
+                status=200,
+                response=msg
+        )
+
+
 # from libs.security import generate_random_string
 
 # Note: you cannot access the request context inside a generator function
@@ -220,8 +286,6 @@ def zip_generator(files_list, construct_registry=False):
 
     zip_output = StreamingBytesIO()
     zip_input = ZipFile(zip_output, mode="w", compression=ZIP_STORED, allowZip64=True)
-    # random_id = generate_random_string()[:32]
-    # print "returning data for query %s" % random_id
     try:
         # chunks_and_content is a list of tuples, of the chunk and the content of the file.
         # chunksize (which is a keyword argument of imap, not to be confused with Beiwe Chunks)
@@ -245,7 +309,6 @@ def zip_generator(files_list, construct_registry=False):
             # print len(zip_output)
             x = zip_output.getvalue()
             total_size += len(x)
-            # print "%s: %sK, %sM" % (random_id, total_size / 1024, total_size / 1024 / 1024)
             yield x  # yield the (compressed) file information
             del x
             zip_output.empty()
@@ -269,10 +332,6 @@ def zip_generator(files_list, construct_registry=False):
         # and also to print an error to the log if we need to.
         pool.close()
         pool.terminate()
-        # if duplicate_files:
-        #     duplcate_file_message = "encountered duplicate files: %s" % ",".join(
-        #             str(name_path) for name_path in duplicate_files)
-
 
 
 #########################################################################################
@@ -298,25 +357,22 @@ def determine_file_name(chunk):
     extension = chunk["chunk_path"][-3:]  # get 3 letter file extension from the source.
     if chunk["data_type"] == SURVEY_ANSWERS:
         # add the survey_id from the file path.
-        return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                   chunk["chunk_path"].rsplit("/", 2)[1], # this is the survey id
-                                   str(chunk["time_bin"]).replace(":", "_"), extension)
+        return f'{chunk["participant__patient_id"]}/{chunk["data_type"]}/{chunk["chunk_path"].rsplit("/", 2)[1]}/{str(chunk["time_bin"]).replace(":", "_")}.{extension}'
 
     elif chunk["data_type"] == IMAGE_FILE:
         # add the survey_id from the file path.
-        return "%s/%s/%s/%s/%s" % (
+        return "/".join([
             chunk["participant__patient_id"],
             chunk["data_type"],
             chunk["chunk_path"].rsplit("/", 3)[1],  # this is the survey id
             chunk["chunk_path"].rsplit("/", 2)[1],  # this is the instance of the user taking a survey
-            chunk["chunk_path"].rsplit("/", 1)[1]
-        )
+            chunk["chunk_path"].rsplit("/", 1)[1]])+f".{extension}"
 
     elif chunk["data_type"] == SURVEY_TIMINGS:
         # add the survey_id from the database entry.
-        return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                   chunk["survey__object_id"],  # this is the survey id
-                                   str(chunk["time_bin"]).replace(":", "_"), extension)
+        return "/".join([chunk["participant__patient_id"], chunk["data_type"],
+                         chunk["survey__object_id"],  # this is the survey id
+                         str(chunk["time_bin"]).replace(":", "_")])+f".{extension}"
 
     elif chunk["data_type"] == VOICE_RECORDING:
         # Due to a bug that was not noticed until July 2016 audio surveys did not have the survey id
@@ -324,13 +380,13 @@ def determine_file_name(chunk):
         # correct this.  We can identify those files by checking for the existence of the extra /.
         # When we don't find it, we revert to original behavior.
         if chunk["chunk_path"].count("/") == 4:  #
-            return "%s/%s/%s/%s.%s" % (chunk["participant__patient_id"], chunk["data_type"],
-                                       chunk["chunk_path"].rsplit("/", 2)[1],  # this is the survey id
-                                       str(chunk["time_bin"]).replace(":", "_"), extension)
+            return "/".join([chunk["participant__patient_id"], chunk["data_type"],
+                             chunk["chunk_path"].rsplit("/", 2)[1],  # this is the survey id
+                             str(chunk["time_bin"]).replace(":", "_")])+f".{extension}"
 
     # all other files have this form:
-    return "%s/%s/%s.%s" % (chunk['participant__patient_id'], chunk["data_type"],
-                            str(chunk["time_bin"]).replace(":", "_"), extension)
+    return "/".join([chunk['participant__patient_id'], chunk["data_type"],
+                            str(chunk["time_bin"]).replace(":", "_")])+f".{extension}"
 
 
 def str_to_datetime(time_string):
@@ -368,7 +424,7 @@ def determine_data_streams_for_db_query(query):
 
         for data_stream in query['data_types']:
             if data_stream not in ALL_DATA_STREAMS:
-                print("data stream '%s' is invalid" % data_stream)
+                print(f"data stream '{data_stream}' is invalid")
                 return abort(404)
 
 
@@ -385,7 +441,7 @@ def determine_users_for_db_query(query):
 
         # Ensure that all user IDs are patient_ids of actual Participants
         if not Participant.objects.filter(patient_id__in=query['user_ids']).count() == len(query['user_ids']):
-            print("invalid user ids: %s" % query['user_ids'])
+            print(f"invalid user ids: {query['user_ids']}")
             return abort(404)
 
 
@@ -470,7 +526,7 @@ def data_pipeline_upload():
     errors = []
     for key in request.values.keys():
         if key not in VALID_PIPELINE_POST_PARAMS:
-            errors.append('encountered invalid parameter: "%s"' % key)
+            errors.append(f'encountered invalid parameter: "{key}"')
 
     if errors:
         return Response("\n".join(errors), 400)

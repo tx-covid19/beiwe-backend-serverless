@@ -3,7 +3,7 @@
 {% block head %}
     {{ super() }}
     <script>filterableObjects = {{ admins|safe }}</script>
-    <script src="/static/javascript/app/survey-builder/controllers/filterable-list-controller.js"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/filterable-list-controller.js') }}"></script>
 {% endblock %}
 
 {% block title %}Manage Researchers{% endblock %}

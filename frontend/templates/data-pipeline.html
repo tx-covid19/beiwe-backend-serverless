@@ -1,22 +1,73 @@
 {% extends "base.html" %}
 
-{% block title %}View Study{% endblock %}
+{% block title %}Run Pipeline{% endblock %}
+
+{% block head %}
+  {{ super() }}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap-datetimepicker.css') }}"  type="text/css"/>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/moment.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/transition.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/collapse.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/bootstrap-datetimepicker-4.17.47.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/data_download_page.js') }}"></script>
+  <script>
+    var studyParticipants = {{ study_participants|safe }};
+  </script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/data-pipeline-exec-web-form-controller.js') }}"></script>
+{% endblock %}
 
 {% block content %}
 
   <div class="container">
     <div class="span12">
       <div class="row">
-        <h2>{{ study.name }}</h2>
+        <h2>{{ study.name }} Data pipelines</h2>
       </div>
     </div>
-    
+
     <div class="span12">
       <div class="row">
         <h3>Run data pipeline code</h3>
-        <form action="/run-manual-code/{{ study.id }}" method="post">
+        <form action="/run-manual-code/{{ study.id }}" method="post" id="data_download_parameters_form">
           <input type="hidden" name="study_id" value="{{ study.id }}">
-          <button type="submit" class="btn btn-primary add_new_patient_button">Run manually</button>
+
+            <div class="form-group">
+               <label for="destination_email_addresses">Email address to notify on pipeline completion</label>
+               <input type="text" name="destination_email_addresses" id="destination_email_addresses" class="form-control">
+            </div>
+
+            <div class="form-group">
+               <label for="start_datetime">Start date and time for data to be processed.</label>
+               <div class="input-group date" id="start_datetimepicker">
+                  <input type="text" class="form-control" name="time_start" id="start_datetime" />
+                  <span class="input-group-addon">
+                    <span class="glyphicon glyphicon-calendar"></span>
+                  </span>
+                </div>
+            </div>
+
+            {# End Datetime #}
+           <div class="form-group">
+              <label for="end_datetime">End date and time for data to be processed.</label>
+                <div class="input-group date" id="end_datetimepicker">
+                  <input type="text" class="form-control" name="time_end" id="end_datetime" />
+                  <span class="input-group-addon">
+                    <span class="glyphicon glyphicon-calendar"></span>
+                  </span>
+                </div>
+           </div>
+
+           <div ng-controller="DataPipelineExecWebFormController">
+            {# Patient Selector #}
+           <div class="form-group">
+               <label for="patient_selector">Participants</label>
+               <select id="patient_selector" ng-model="selectedPatient" ng-options="participant for participant in studyParticipants | orderBy : participant track by participant" name="participants" class="form-control" size=12 multiple></select>
+           </div>
+           </div>
+
+           <!-- <button type="submit" class="btn btn-primary download_submit_button">Run manually</button> -->
+	   <input type="hidden" name="job_type" value="run_pipeline" />
+           <input type="submit" class="btn btn-success" value="Schedule Pipeline" id="download_submit_button" />
         </form>
       </div>
     </div>

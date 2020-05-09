@@ -9,6 +9,8 @@ from libs.streaming_bytes_io import StreamingBytesIO, StreamingStringsIO
 from database.study_models import Study
 from database.user_models import Participant
 
+from config.settings import IS_SERVERLESS
+
 participant_administration = Blueprint('participant_administration', __name__)
 
 
@@ -64,8 +66,13 @@ def create_new_participant():
 
     # Create an empty file on S3 indicating that this user exists
     study_object_id = Study.objects.filter(pk=study_id).values_list('object_id', flat=True).get()
-    s3_upload(patient_id, b"", study_object_id)
-    create_client_key_pair(patient_id, study_object_id)
+    # s3_upload(patient_id, b"", study_object_id)
+    #
+    # # if we are running in serverless mode a lambda function will be triggered
+    # # by the empty file written in the previous line, which will generate
+    # # the keys
+    # if IS_SERVERLESS is False:
+    #     create_client_key_pair(patient_id, study_object_id)
 
     response_string = 'Created a new patient\npatient_id: {:s}\npassword: {:s}'.format(patient_id, password)
     flash(response_string, 'success')
@@ -81,6 +88,12 @@ def create_many_patients(study_id=None):
     to be attached to, and returns a CSV file for download with a mapping of Patient IDs and
     passwords. """
     number_of_new_patients = int(request.form.get('number_of_new_patients', 0))
+
+    if IS_SERVERLESS is True and number_of_new_patients > 500:
+        response_string = 'Can not create more than 500 patients at a time, please break into smaller chunks.'
+        flash(response_string, 'danger')
+        return redirect('/view_study/{:s}'.format(study_id))
+        
     desired_filename = request.form.get('desired_filename', '')
     filename_spaces_to_underscores = sub(r'[\ =]', '_', desired_filename)
     filename = sub(r'[^a-zA-Z0-9_\.=]', '', filename_spaces_to_underscores)
@@ -100,7 +113,13 @@ def csv_generator(study_id, number_of_new_patients):
         patient_id, password = Participant.create_with_password(study_id=study_id)
         # Creates an empty file on s3 indicating that this user exists
         s3_upload(patient_id, "", study_object_id)
-        create_client_key_pair(patient_id, study_object_id)
+
+        # if we are running in serverless mode a lambda function will be triggered
+        # by the empty file written in the previous line, which will generate
+        # the keys
+        if IS_SERVERLESS is False:
+            create_client_key_pair(patient_id, study_object_id)
+
         filewriter.writerow([patient_id, password])
         yield si.getvalue()
         si.empty()

@@ -1,5 +1,6 @@
 from flask import json
 from libs.s3 import s3_list_files, s3_retrieve
+from config.constants import RAW_DATA_FOLDER
 
 
 ################################ CSV HANDLER ###################################
@@ -34,7 +35,7 @@ def grab_file_names(study_id, survey_id, user_id, number_points):
     user_id = user_id if not isinstance(user_id, bytes) else user_id.decode()
     number_points = number_points if not isinstance(number_points, bytes) else number_points.decode()
 
-    all_files = s3_list_files("%s/%s/surveyAnswers/%s" % (str(study_id), str(user_id), str(survey_id)))
+    all_files = s3_list_files("%s/%s/%s/surveyAnswers/%s" % (RAW_DATA_FOLDER, str(study_id), str(user_id), str(survey_id)))
     return sorted(all_files[-number_points:])
 
 

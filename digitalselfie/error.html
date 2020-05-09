@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="static/assets/img/favicons/favicon-32x32.png">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Upload your screenshots">
+    <meta name="author" content="Cameron Craddock">
+    <link rel="stylesheet" href="/static/css/sticky-footer.css">
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+
+    <title>Upload your digital selfie!</title>
+
+</head>
+
+<body>
+
+    <main role="main" class="container">
+        <div class="container">
+            <div style="background:rgb(191,87,0) !important; color:white !important;" class="jumbotron">
+            <h1>Upload Your Digital Selfie</h1>
+		<p class="font-italic text-white">Behavioral & Psychological Responses to the COVID-19 Pandemic:<br>
+			A SmartPhone Sensing Study</p>
+            </div>
+
+	    <p> Digital selfie upload failed to load! <a href="https://digitalselfie.ut-wcwh.org">Try again.</a></p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container text-center">
+		<p class="font-italic">Copyright 2020, The University of Texas at Austin, <a href="https://bridgingbarriers.utexas.edu/whole-communities-whole-health/">Whole Communities Whole Health</p>
+	</div>
+    </footer>
+
+    <script src="/static/javascript/jquery-3.2.1.slim.min.js"></script>
+    <script src="/static/javascript/popper.js"></script>
+    <script src="/static/javascript/bootstrap.min.js"></script>
+    <script type="text/javascript">
+
+        $('.custom-file input').change(function (e) {
+            var files = [];
+            for (var i = 0; i < $(this)[0].files.length; i++) {
+                files.push($(this)[0].files[i].name);
+            }
+            $(this).next('.custom-file-label').html(files.join(', '));
+        });
+
+    </script>
+
+</body>
+
+</html>

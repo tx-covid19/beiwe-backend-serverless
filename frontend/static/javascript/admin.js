@@ -1,6 +1,68 @@
 $(document).ready(function(){
+
     // Set up the main list of patients using DataTables
-    $("#patients_list").DataTable();
+    $("#pipelines_list").DataTable({
+        dom: 'Bfrtip',
+        "order": [[1, "desc" ]],
+        buttons: [
+            'csv', 'excel', 'pageLength'
+        ],
+        "pageLength": 5,
+        "lengthMenu": [[5, 10, 25, 50, 100, 500, 1000, -1], [5, 10, 25, 50, 100, 500, 1000, "All"]],
+    });
+
+    // Set up the main list of patients using DataTables
+    $("#total_upload_stats").DataTable({
+        dom: 'Bfrtip',
+        buttons: [
+            'csv', 'excel', 'pageLength'
+        ],
+        "pageLength": 5,
+        "lengthMenu": [[5, 10, 25, 50, 100, 500, 1000, -1], [5, 10, 25, 50, 100, 500, 1000, "All"]],
+    });
+
+    // Set up the main list of files to process using DataTables
+    $("#files_to_process_table").DataTable({
+        dom: 'Bfrtip',
+        "order": [[0, "asc"]],
+        buttons: [
+            'csv', 'excel', 'pageLength'
+        ],
+        "pageLength": 25,
+        "lengthMenu": [[5, 10, 25, 50, 100, 500, 1000, -1], [5, 10, 25, 50, 100, 500, 1000, "All"]],
+    });
+
+    // Set up the main list of patients using DataTables
+    $("#patients_list").DataTable({
+        dom: 'Bfrtip',
+        "order": [[2, "asc"]],
+        buttons: [
+            'csv', 'excel', 'pageLength'
+        ],
+        "pageLength": 25,
+        "lengthMenu": [[5, 10, 25, 50, 100, 500, 1000, -1], [5, 10, 25, 50, 100, 500, 1000, "All"]],
+    });
+
+    // Set up the main list of patients using DataTables
+    $("#patients_statistics").DataTable({
+        dom: 'Bfrtip',
+        "order": [[2, "asc"]],
+        buttons: [
+            'csv', 'excel', 'pageLength'
+        ],
+        "pageLength": 25,
+        "lengthMenu": [[5, 10, 25, 50, 100, 500, 1000, -1], [5, 10, 25, 50, 100, 500, 1000, "All"]],
+    });
+
+    // Set up the main list of patients using DataTables
+    $("#alias_list").DataTable({
+        dom: 'Bfrtip',
+        buttons: [
+            'csv', 'excel', 'pageLength'
+        ],
+        "pageLength": 5,
+        "lengthMenu": [[5, 10, 25, 50, 100, 500, 1000, -1], [5, 10, 25, 50, 100, 500, 1000, "All"]],
+    });
 
     $('#many-new-patients-loading-spinner').hide();
 

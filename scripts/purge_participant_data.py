@@ -18,9 +18,10 @@ _imp.load_source("__init__", _current_folder_init)
 # noinspection PyUnresolvedReferences
 from config import load_django
 from config.settings import S3_BUCKET
-from config.constants import CHUNKS_FOLDER, API_TIME_FORMAT
+from config.constants import CHUNKS_FOLDER, API_TIME_FORMAT, RAW_DATA_FOLDER
 from database.user_models import Participant
-from database.data_access_models import ChunkRegistry
+from database.data_access_models import ChunkRegistry, FileToProcess
+from database.profiling_models import UploadTracking
 from libs.file_processing import unix_time_to_string
 from libs.s3 import s3_list_files, s3_list_versions, conn as s3_conn
 
@@ -86,15 +87,16 @@ def setup():
     all_patients_exist = True
     for patient_id, _ in sorted_data:
         if not Participant.objects.filter(patient_id=patient_id).exists():
-            all_patients_exist = False
+            #all_patients_exist = False
             print("Participant '%s' does not exist." % patient_id)
-    if not all_patients_exist:
-        exit(1)
+            sorted_data.remove((patient_id, _))
+    #if not all_patients_exist:
+        #exit(1)
 
 
     # print out info for confirmation
     for participant_name, date in sorted_data:
-        print(participant_name, "--", humanize_date(date))
+        print(participant_name, "--", humanize_date(date) if not 'all' in date else date)
 
     # force user to confirm
     if not skip_confirmation:
@@ -109,27 +111,66 @@ def setup():
 
     return sorted_data
 
+def delete_participants(sorted_data):
+    print()
+    for patient_id, date in sorted_data:
+        print("removing Participant entry for %s..." % patient_id)
+        Participant.objects.filter(patient_id=patient_id).delete()
+
+# delete chunk registries
+def delete_upload_tracking(sorted_data):
+    print()
+    for patient_id, date in sorted_data:
+        print("removing UploadTracking data for %s..." % patient_id)
+        participant = Participant.objects.filter(patient_id=patient_id)
+        if date == 'all':
+            UploadTracking.objects.filter(participant=participant).delete()
+        else:
+            date = convert_date(date)
+            UploadTracking.objects.filter(participant=participant, time_bin__gte=date).delete()
+
 # delete chunk registries
 def delete_chunk_registries(sorted_data):
     print()
     for patient_id, date in sorted_data:
         print("removing ChunkRegistry data for %s..." % patient_id)
-        date = convert_date(date)
         participant = Participant.objects.filter(patient_id=patient_id)
-        ChunkRegistry.objects.filter(participant=participant, time_bin__gte=date).delete()
+        if date == 'all':
+            ChunkRegistry.objects.filter(participant=participant).delete()
+        else:
+            date = convert_date(date)
+            ChunkRegistry.objects.filter(participant=participant, time_bin__gte=date).delete()
 
+# delete chunk registries
+def delete_files_to_process(sorted_data):
+    print()
+    for patient_id, date in sorted_data:
+        print("removing FileToProcess data for %s..." % patient_id)
+        participant = Participant.objects.filter(patient_id=patient_id)
+        if date == 'all':
+            FileToProcess.objects.filter(participant=participant).delete()
+        else:
+            date = convert_date(date)
+            FilesToProcess.objects.filter(participant=participant, time_bin__gte=date).delete()
 
 def assemble_deletable_files(sorted_data):
     deletable_file_paths = []
 
     for patient_id, expunge_start_date in sorted_data:
-        participant = Participant.objects.get(patient_id=patient_id)
+        try:
+            participant = Participant.objects.get(patient_id=patient_id)
+        except:
+            print('Participant DNE?')
+            continue
 
         # technically it is a datetime object
-        expunge_start_date = convert_date(expunge_start_date)
-        expunge_start_unix_timestamp = int((expunge_start_date - UNIX_EPOCH_START).total_seconds()) * 1000
+        if expunge_start_date == 'all':
+            expunge_start_unix_timestamp = 0
+        else:
+            expunge_start_date = convert_date(expunge_start_date)
+            expunge_start_unix_timestamp = int((expunge_start_date - UNIX_EPOCH_START).total_seconds()) * 1000
 
-        prefix = str(participant.study.object_id) + "/" + patient_id + "/"
+        prefix = RAW_DATA_FOLDER + "/" + str(participant.study.object_id) + "/" + patient_id + "/"
         s3_files = s3_list_files(prefix, as_generator=True)
 
         chunks_prefix = CHUNKS_FOLDER + "/" + prefix
@@ -154,8 +195,25 @@ def assemble_raw_files(s3_file_paths, expunge_timestamp):
     ret = []
     for file_path in s3_file_paths:
         # there may be some corrupt file paths that has _ instead of /
-        extracted_timestamp_str = file_path.replace("_", "/").rsplit("/", 1)[1][:-4]
-        extracted_timestamp_int = int(extracted_timestamp_str)
+        extracted_timestamp_str = file_path.replace("_", "/").rsplit("/", 1)[1].rsplit('.', 1)[0]
+        try:
+            extracted_timestamp_int = int(extracted_timestamp_str)
+        except ValueError:
+
+            extracted_timestamp_vals = extracted_timestamp_str.split(".")
+            extracted_timestamp_str_datetime = extracted_timestamp_vals[0]
+            extracted_timestamp_msec = 0
+
+            if len(extracted_timestamp_vals) == 2:
+                extracted_timestamp_msec = int(extracted_timestamp_vals[1])
+            elif len(extracted_timestamp_vals) != 1:
+                raise ValueError(f"Don't know how to parse {extracted_timestamp_str}")
+
+
+            extracted_dt = datetime.strptime(extracted_timestamp_str_datetime, API_TIME_FORMAT)
+            extracted_timestamp_int = int(extracted_dt.timestamp()) * 1000 + extracted_timestamp_msec
+            extracted_timestamp_str = str(extracted_timestamp_int)
+            print(extracted_timestamp_str, len(extracted_timestamp_str))
 
         if len(extracted_timestamp_str) == 10:
             extracted_timestamp_int = extracted_timestamp_int * 1000
@@ -200,9 +258,11 @@ def delete_versions(files_to_delete):
 
 setup_data = setup()
 delete_chunk_registries(setup_data)
+delete_upload_tracking(setup_data)
+delete_files_to_process(setup_data)
 
 print("\nAssembling the files to delete...")
 deletable_files = assemble_deletable_files(setup_data)
 
 delete_versions(deletable_files)
-
+delete_participants(setup_data)

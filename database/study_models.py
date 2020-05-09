@@ -4,13 +4,14 @@ import json
 from django.db import models
 from django.db.models import F, Func
 from django.utils import timezone
-
+from django.core.exceptions import ValidationError
 from config.constants import ResearcherRole
 from config.study_constants import (ABOUT_PAGE_TEXT, AUDIO_SURVEY_SETTINGS, CONSENT_FORM_TEXT,
     DEFAULT_CONSENT_SECTIONS_JSON, IMAGE_SURVEY_SETTINGS, SURVEY_SUBMIT_SUCCESS_TOAST_TEXT)
-from database.models import AbstractModel, JSONTextField
+from database.models import AbstractModel, JSONTextField, is_object_id
 from database.user_models import Researcher
 from database.validators import LengthValidator
+from django.contrib.postgres.fields import JSONField
 
 
 class Study(AbstractModel):
@@ -61,6 +62,7 @@ class Study(AbstractModel):
             # Make the dict look like the old Mongolia-style dict that the frontend is expecting
             survey_dict.pop('id')
             survey_dict.pop('deleted')
+            survey_dict.pop('name')
             survey_dict['_id'] = survey_dict.pop('object_id')
             
             # Exclude image surveys for the Android app to avoid crashing it
@@ -72,10 +74,10 @@ class Study(AbstractModel):
         return survey_json_list
 
     def get_survey_ids_for_study(self, survey_type='tracking_survey'):
-        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', flat=True)
+        return self.surveys.filter(survey_type=survey_type).exclude(deleted=True).values_list('id', flat=True)
 
     def get_survey_ids_and_object_ids_for_study(self, survey_type='tracking_survey'):
-        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', 'object_id')
+        return self.surveys.filter(survey_type=survey_type).exclude(deleted=True).values_list('id', 'object_id', 'name')
 
     def get_study_device_settings(self):
         return self.device_settings
@@ -110,6 +112,39 @@ class StudyField(models.Model):
         unique_together = (("study", "field_name"),)
 
 
+class StudyConfig(AbstractModel):
+    study = models.ForeignKey('Study', on_delete=models.PROTECT)
+    study_configuration = JSONField()
+
+    @classmethod
+    def create_from_file(cls, json_file):
+
+        with open(json_file, 'r') as json_fd:
+            study_configuration = json.load(json_fd)
+
+        if 'STUDY_OBJECT_ID' not in study_configuration:
+            raise ValueError('Configuration file {0} does not contain a STUDY_OBJECT_ID key or value'.format(json_file))
+
+        # check to see if the config alread exists, if it does, delete it and then re-add
+        study_configs = cls.objects.exclude(deleted=True).filter(study__object_id=study_configuration['STUDY_OBJECT_ID'])
+
+        for study_config in study_configs.all():
+            print('Found an existing study configuration for {0}, replacing with contents of file {1}'.format(study_configuration['STUDY_OBJECT_ID'], json_file))
+            study_config.mark_deleted()
+
+        # connect to the database to get a list of data
+        if not is_object_id(study_configuration['STUDY_OBJECT_ID']):
+            raise ValueError('{0} is not a correct study object id'.format(study_configuration['STUDY_OBJECT_ID']))
+
+        try:
+            print('Looking for study {0}'.format(study_configuration['STUDY_OBJECT_ID']))
+            study = Study.objects.get(object_id=study_configuration['STUDY_OBJECT_ID'])
+        except Study.DoesNotExist:
+            print('Study {0} does not exist.'.format(study_configuration['STUDY_OBJECT_ID']))
+            raise
+
+        return cls.objects.create(**{'study': study, 'study_configuration': study_configuration}) 
+    
 class AbstractSurvey(AbstractModel):
     """ AbstractSurvey contains all fields that we want to have copied into a survey backup whenever
     it is updated. """
@@ -124,14 +159,20 @@ class AbstractSurvey(AbstractModel):
         (DUMMY_SURVEY, DUMMY_SURVEY),
         (IMAGE_SURVEY, IMAGE_SURVEY)
     )
-    
+   
+    name = models.TextField(unique=False, null=False, help_text='Name of the study; can be of any length')
     content = JSONTextField(default='[]', help_text='JSON blob containing information about the survey questions.')
     survey_type = models.CharField(max_length=16, choices=SURVEY_TYPE_CHOICES,
                                    help_text='What type of survey this is.')
     settings = JSONTextField(default='{}', help_text='JSON blob containing settings for the survey.')
     timings = JSONTextField(default=json.dumps([[], [], [], [], [], [], []]),
                             help_text='JSON blob containing the times at which the survey is sent.')
-    
+
+    def mark_deleted(self):
+        self.name = '{0} Deleted {1}'.format(self.name, timezone.now().isoformat())
+        self.deleted = True
+        self.save()
+
     class Meta:
         abstract = True
 
@@ -165,6 +206,64 @@ class Survey(AbstractSurvey):
     # the study field is not inherited because we need to change its related name
     study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='surveys')
 
+    class Meta:
+        unique_together = (("study", "name"),)
+
+    @classmethod
+    def create_with_object_id(cls, **kwargs):
+        object_id = cls.generate_objectid_string("object_id")
+        survey = cls.objects.create(object_id=object_id, **kwargs)
+        return survey
+
+    @classmethod
+    def create_with_settings(cls, survey_type, **kwargs):
+        """
+        Create a new Survey with the provided survey type and attached to the given Study,
+        as well as any other given keyword arguments. If the Survey is audio/image and no other
+        settings are given, give it the default audio/image survey settings.
+        """
+        
+        if survey_type == cls.AUDIO_SURVEY and 'settings' not in kwargs:
+            kwargs['settings'] = json.dumps(AUDIO_SURVEY_SETTINGS)
+        elif survey_type == cls.IMAGE_SURVEY and 'settings' not in kwargs:
+            kwargs['settings'] = json.dumps(IMAGE_SURVEY_SETTINGS)
+
+        survey = cls.create_with_object_id(survey_type=survey_type, **kwargs)
+        return survey
+
+
+class ParticipantSurvey(AbstractSurvey):
+    """
+    Survey can now be participant specific!
+
+    Surveys contain all information the app needs to display the survey correctly to a participant,
+    and when it should push the notifications to take the survey.
+
+    Surveys must have a 'survey_type', which is a string declaring the type of survey it
+    contains, which the app uses to display the correct interface.
+
+    Surveys contain 'content', which is a JSON blob that is unpacked on the app and displayed
+    to the participant in the form indicated by the survey_type.
+
+    Timings schema: a survey must indicate the day of week and time of day on which to trigger;
+    by default it contains no values. The timings schema mimics the Java.util.Calendar.DayOfWeek
+    specification: it is zero-indexed with day 0 as Sunday. 'timings' is a list of 7 lists, each
+    inner list containing any number of times of the day. Times of day are integer values
+    indicating the number of seconds past midnight.
+    
+    Inherits the following fields from AbstractSurvey
+    content
+    survey_type
+    settings
+    timings
+    """
+
+    # This is required for file name and path generation
+    object_id = models.CharField(max_length=24, unique=True, validators=[LengthValidator(24)])
+    # the study field is not inherited because we need to change its related name
+    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='participant_surveys')
+    participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='participant_surveys')
+
     @classmethod
     def create_with_object_id(cls, **kwargs):
         object_id = cls.generate_objectid_string("object_id")
@@ -195,6 +294,48 @@ class SurveyArchive(AbstractSurvey):
     # two new foreign key references
     survey = models.ForeignKey('Survey', on_delete=models.PROTECT, related_name='archives')
     study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='surveys_archive')
+
+
+class SurveyEvents(AbstractModel):
+    """ table to keep track of survey events, such as notified, expired, and completed """
+
+    NOTIFIED = 'notified'
+    EXPIRED = 'expired'
+    COMPLETED = 'submitted'
+    ANDROID_COMPLETED = 'User hit submit'
+    SURVEY_EVENT_TYPES = (
+        (NOTIFIED, NOTIFIED),
+        (EXPIRED, EXPIRED),
+        (COMPLETED, COMPLETED),
+    )
+    
+    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='survey_events')
+    survey = models.ForeignKey('Survey', on_delete=models.PROTECT, related_name='events')
+    participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='survey_events')
+
+    timestamp = models.DateTimeField() 
+    event_type = models.CharField(max_length=16, choices=SURVEY_EVENT_TYPES,
+            help_text='What type of event is being recorded.')
+
+    class Meta:
+        unique_together = (("study", "survey", "participant", "timestamp", "event_type"),)
+
+    @classmethod
+    def register_survey_event(cls, study_id, survey_id, participant_id, timestamp, event_type):
+
+        if event_type not in [cls.NOTIFIED, cls.EXPIRED, cls.COMPLETED]:
+            raise ValueError(f'Error: {event_type} is not a valid event type, should be one of {[NOTIFIED, EXPIRED, COMPLETED]}')
+
+        try:
+            cls.objects.create(
+                study_id=study_id,
+                survey_id=survey_id,
+                participant_id=participant_id,
+                timestamp=timestamp,
+                event_type=event_type
+            )
+        except ValidationError as e:
+            print(f'ignoring duplicate row {e}')
 
 
 class DeviceSettings(AbstractModel):

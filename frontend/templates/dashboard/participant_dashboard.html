@@ -3,14 +3,14 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="/static/css/dashboard_pages.css"  type="text/css"/>
-  <link rel="stylesheet" href="/static/css/libraries/bootstrap-datetimepicker.css"  type="text/css"/>
-  <script type="text/javascript" src="/static/javascript/libraries/moment.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/transition.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/collapse.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/bootstrap-datetimepicker.js"></script>
-  <script src="/static/javascript/patient_dashboard_features.js"></script>
-  <script type="text/javascript">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard_pages.css') }}"  type="text/css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap-datetimepicker.css') }}"  type="text/css"/>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/moment.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/transition.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/collapse.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/bootstrap-datetimepicker-4.17.47.js') }}"></script>
+        <script type="text/javascript" src="{{ url_for('static', filename='javascript/patient_dashboard_features.js') }}"></script>
+	<script type="text/javascript">
     {% if first_date_data and last_date_data %}
       window.first_day = new Date({{ first_date_data.year}}, {{first_date_data.month - 1}}, {{first_date_data.day }});
       window.last_day = new Date({{ last_date_data.year}}, {{last_date_data.month - 1}}, {{last_date_data.day }});
@@ -47,11 +47,38 @@
         </h1>
     </div>
 
+    <div class="summary_table">
+	<h3 class="h4">Data Stream Summaries</h3>
+        <table class="table table-striped table-bordered" id="dashboard-datastream-summary-table">
+            <thead>
+                <tr>
+                    <th> Statistic </th>
+                    <th> Total </th>
+                </tr>
+            </thead>
+            {% for stream, stream_name in data_stream_dict.items() %} {# iterate over keys #}
+                <div class="table_data">
+                    <tr>
+                        <th> <a href="/dashboard/{{ study_id }}/data_stream/{{ stream }}">
+                                        {{ stream_name }}</a>
+                        </th>
+                        {% if stream in byte_stream_summary %} {# iterate over bytes in values #}
+			    <td class="bytes"> {{ "{:,}".format(byte_stream_summary[stream]) }} </td> 
+                        {% else %}
+                            <td class="bytes">0</td>
+                        {% endif %}
+                    </tr>
+                </div>
+            {% endfor %}
+        </table>
+    </div>
+
     {#  ################# MIDDLE BUTTONS #################### #}
 
     {%  if times %}
       <div class="content ng-cloak" ng-controller='buttonController' id="bctrl">
         <div class="dates">
+	<h3 class="h4">Data Streams</h3>
             <p>Available Dates: {{ first_date_data.strftime('%m/%d/%Y') }}
                 - {{ last_date_data.strftime('%m/%d/%Y') }}
             </p>
@@ -94,26 +121,26 @@
         </div>
 
         {#  ################# THE TABLE ################## #}
-        <table class="table table-striped table-bordered">
+        <table class="table table-striped table-bordered" id="dashboard-datastream-table">
             <thead>
                 <tr>
                     <th> Statistic </th>
-                    {% for time in range(times|length) %}
-                            <th>{{ times[time].strftime('%m/%d/%Y') }}</th>
+                    {% for time_bin in times %}
+                            <th>{{ time_bin.strftime('%m/%d/%Y') }}</th>
                     {% endfor %}
                 </tr>
             </thead>
-            {% for stream, byte_list in byte_streams.items() %} {# iterate over keys #}
+            {% for stream, stream_name in data_stream_dict.items() %} {# iterate over keys #}
                 <div class="table_data">
                     <tr>
                         <th> <a href="/dashboard/{{ study_id }}/data_stream/{{ stream }}">
-                                        {{   data_stream_dict.get(stream) }}</a>
+                                        {{ stream_name }}</a>
                         </th>
-                        {% for bytes in byte_list %} {# iterate over bytes in values #}
-                            {% if bytes == None %}
-                                <td class="bytes">0</td>
+                        {% for time_bin in times %} {# iterate over bytes in values #}
+                            {% if stream in byte_streams and time_bin in byte_streams[stream] %}
+			        <td class="bytes"> {{ "{:,}".format(byte_streams[stream][time_bin]) }} </td> 
                             {% else %}
-                                <td class="bytes"> {{ "{:,}".format(bytes) }} </td>
+                                <td class="bytes">0</td>
                             {% endif %}
                         {% endfor %}
                     </tr>

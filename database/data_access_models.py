@@ -8,14 +8,15 @@ from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
 
 from config.constants import (API_TIME_FORMAT, CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES,
-    CHUNKS_FOLDER, IDENTIFIERS, PIPELINE_FOLDER, REVERSE_UPLOAD_FILE_TYPE_MAPPING)
+    CHUNKS_FODLER, IDENTIFIERS, PIPELINE_FOLDER, RAW_DATA_FOLDER, REVERSE_UPLOAD_FILE_TYPE_MAPPING)
+
 from database.models import AbstractModel
 from database.study_models import Study
 from database.user_models import Participant
 from database.validators import LengthValidator
 from libs.s3 import s3_list_files, s3_retrieve
 from libs.security import chunk_hash
-
+import codecs
 
 class FileProcessingLockedError(Exception): pass
 class UnchunkableDataTypeError(Exception): pass
@@ -84,7 +85,15 @@ class ChunkRegistry(AbstractModel):
         # Django's behavior (at least on this project, but this project is set to the New York
         # timezone so it should be generalizable) is to add UTC as a timezone when storing a naive
         # datetime in the database.
-        
+       
+        # Changing file_size from size in bytes, to size in lines or number of observations, which should be 
+        # easier to interpret,  make sure that there are no extraneous newline characters at the
+        # end of the line. this calculation will result in the number of lines in the file being undercounted
+        # by one, which will, in effect, exclude the header line from count
+
+        chunk_file_number_of_observations = codecs.decode(file_contents, "zip").decode('utf-8').rstrip('\n').count('\n')
+        print(f'number of observations: {chunk_file_number_of_observations}')
+
         cls.objects.create(
             is_chunkable=True,
             chunk_path=chunk_path,
@@ -94,7 +103,7 @@ class ChunkRegistry(AbstractModel):
             study_id=study_id,
             participant_id=participant_id,
             survey_id=survey_id,
-            file_size=len(file_contents),
+            file_size=chunk_file_number_of_observations,
         )
     
     @classmethod
@@ -105,7 +114,9 @@ class ChunkRegistry(AbstractModel):
         
         if data_type in CHUNKABLE_FILES:
             raise ChunkableDataTypeError
-        
+       
+        # unchunkable data may be binary, so leave the file_size calcuation in bytes
+
         cls.objects.create(
             is_chunkable=False,
             chunk_path=chunk_path,
@@ -173,11 +184,12 @@ class FileToProcess(AbstractModel):
     def append_file_for_processing(cls, file_path, study_object_id, **kwargs):
         # Get the study's primary key
         study_pk = Study.objects.filter(object_id=study_object_id).values_list('pk', flat=True).get()
-        
-        if file_path[:24] == study_object_id:
+       
+        raw_data_study_dir = '/'.join([RAW_DATA_FOLDER, study_object_id])
+        if file_path[:len(raw_data_study_dir)] == raw_data_study_dir:
             cls.objects.create(s3_file_path=file_path, study_id=study_pk, **kwargs)
         else:
-            cls.objects.create(s3_file_path=study_object_id + '/' + file_path, study_id=study_pk, **kwargs)
+            cls.objects.create(s3_file_path=raw_data_study_dir + '/' + file_path, study_id=study_pk, **kwargs)
 
     @classmethod
     def reprocess_originals_from_chunk_path(cls, chunk_path):
