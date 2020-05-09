@@ -10,13 +10,13 @@ from database.user_models import Participant
 response_api = Blueprint('response_api', __name__)
 
 
-@response_api.route('last7Days/<applet_id>', methods=['GET'])
+@response_api.route('/last7Days/<applet_id>', methods=['GET'])
 @jwt_required
 def get_recent_response(applet_id):
     return jsonify({'responses': {}}), 200
 
 
-@response_api.route('<applet_id>/<activity_id>', methods=['POST'])
+@response_api.route('/<applet_id>/<activity_id>', methods=['POST'])
 @jwt_required
 def add_response(applet_id, activity_id):
     patient_id = get_jwt_identity()
