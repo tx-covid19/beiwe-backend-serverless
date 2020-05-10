@@ -18,3 +18,11 @@ pytz
 ipython
 django-extensions
 python-dateutil
+
+# misc
+Flask-Cors==3.0.8
+Flask-JWT-Extended==3.24.1
+pyfcm==1.4.7
+PyGithub==1.51
+us==2.0.2
+zipcodes==1.1.0
