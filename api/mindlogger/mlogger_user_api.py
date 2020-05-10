@@ -102,7 +102,7 @@ def get_applets():
             res_list.append(item)
         return jsonify(res_list), 200
     except:
-        return res_list, 200
+        return jsonify(res_list), 200
 
 
 # always return empty
