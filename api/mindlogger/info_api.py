@@ -45,22 +45,38 @@ def get_covid_cases():
         if county is None or state is None:
             return jsonify({'msg': 'zipcode not found.'})
         else:
+            state_data = {
+                k: sum(
+                    county_data.get(k, 0)
+                    for county_data in region_data[state].values()
+                ) for k in ['confirmed', 'deaths', 'recovered', 'active']
+            }
             return jsonify({
                 'latest_update': latest_data.updated_time,
-                'country_total': latest_data.country_total,
-                'country_deaths': latest_data.country_deaths,
-                'local': {
-                    **region_data[state][county]
+                'country': {
+                    'name': 'United States of America',
+                    'confirmed': latest_data.country_confirmed,
+                    'deaths': latest_data.country_deaths,
+                    'recovered': latest_data.country_recovered,
+                },
+                'state': {
+                    'name': state,
+                    **state_data
+                },
+                'county': {
+                    'name': county,
+                    **region_data[state][county],
                 }
             })
     else:
         return jsonify({
             'latest_update': latest_data.updated_time,
-            'country_total': latest_data.country_total,
-            'country_deaths': latest_data.country_deaths,
-            'region_data': {
-                **region_data
-            }
+            'country': {
+                'confirmed': latest_data.country_confirmed,
+                'recovered': latest_data.country_recovered,
+                'deaths': latest_data.country_deaths,
+            },
+            'data': region_data,
         })
 
 
@@ -68,9 +84,13 @@ def usa_country_wide():
     try:
         r = requests.get('https://covid19.mathdro.id/api/countries/us', timeout=30)
         data = r.json()
-        return int(data['confirmed']['value']), int(data['deaths']['value'])
+        return (
+            int(data['confirmed']['value']),
+            int(data['recovered']['value']),
+            int(data['deaths']['value'])
+        )
     except:
-        return 0, 0
+        return 0, 0, 0
 
 
 @info_api.route('/refresh', methods=['GET'])
@@ -84,21 +104,19 @@ def refresh_data():
         contents.sort(key=lambda x: x.last_modified)
         file = contents[-1]
 
-        country_stat = {}
-        region_data = defaultdict(dict)
-
         # US country-level
-        us_total, us_deaths = usa_country_wide()
-        country_stat['US'] = {
-            'total': us_total,
-            'deaths': us_deaths
-        }
+        us_confirmed, us_recovered, us_deaths = usa_country_wide()
 
         stream = urllib.request.urlopen(file.download_url)
         csvfile = csv.reader(codecs.iterdecode(stream, 'utf-8'))
         last_update = ''
+
+        region_data = defaultdict(dict)
         for row in csvfile:
             county, state, country = row[1], row[2], row[3]
+
+            if country != 'US':
+                continue
 
             # Skip the first line
             if county == 'Admin2':
@@ -110,18 +128,18 @@ def refresh_data():
             recovered = int(row[9])
             active = int(row[10])
 
-            if country == 'US':
-                region_data[state][county] = {
-                    'confirmed': confirmed,
-                    'deaths': deaths,
-                    'recovered': recovered,
-                    'active': active
-                }
+            region_data[state][county] = {
+                'confirmed': confirmed,
+                'deaths': deaths,
+                'recovered': recovered,
+                'active': active
+            }
 
         try:
             CovidCase(updated_time=last_update,
-                      country_total=country_stat['US']['total'],
-                      country_deaths=country_stat['US']['deaths'],
+                      country_confirmed=us_confirmed,
+                      country_recovered=us_recovered,
+                      country_deaths=us_deaths,
                       region_data=json.dumps(region_data)).save()
         except:
             # has record with the same updated time
