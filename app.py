@@ -14,7 +14,7 @@ from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
     mobile_api, participant_administration, survey_api)
-from api.mindlogger import mlogger_user_api, applet_api, response_api, schedule_api, push_notification_api, file_api, info_api
+from api.mindlogger import mlogger_user_api, applet_api, response_api, schedule_api, push_notification_api, file_api, info_api, gps_api
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
@@ -59,6 +59,7 @@ app.register_blueprint(schedule_api.schedule_api, url_prefix='/api/v1/schedule')
 app.register_blueprint(push_notification_api.push_notification_api)
 app.register_blueprint(file_api.file_api, url_prefix='/api/v1/file')
 app.register_blueprint(info_api.info_api, url_prefix='/api/v1/info')
+app.register_blueprint(gps_api.gps_api, url_prefix='/api/v1')
 
 # Don't set up Sentry for local development
 if os.environ['DJANGO_DB_ENV'] != 'local':
