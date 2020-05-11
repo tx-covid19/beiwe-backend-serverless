@@ -30,6 +30,33 @@ def map_zipcode_to_county(zipcode: str):
         return None, None
 
 
+def get_latest_file_url(repo_path, folder_path, suffix):
+    try:
+        g = Github()
+        repo = g.get_repo(repo_path)
+        contents = repo.get_contents(folder_path)
+    except:
+        return ''
+
+    contents = [x for x in contents if x.name.endswith('.' + suffix)]
+    contents.sort(key=lambda x: x.last_modified)
+    if contents:
+        file = contents[-1]
+        return file.download_url
+    else:
+        return ''
+
+
+def get_travis_data():
+    url = get_latest_file_url('tx-covid19/Austin-COVID19', '', 'json')
+    try:
+        r = requests.get(url, timeout=30)
+        data = r.json()
+        return data
+    except:
+        return {}
+
+
 @info_api.route('/covid19', methods=['GET'])
 @jwt_required
 def get_covid_cases():
@@ -40,6 +67,7 @@ def get_covid_cases():
         return jsonify({'msg': 'No data found.'})
 
     zipcode = request.args.get('zipcode', '')
+    travis_data = get_travis_data()
     if zipcode:
         county, state = map_zipcode_to_county(zipcode)
         if county is None or state is None:
@@ -51,7 +79,7 @@ def get_covid_cases():
                     for county_data in region_data[state].values()
                 ) for k in ['confirmed', 'deaths', 'recovered', 'active']
             }
-            return jsonify({
+            res = {
                 'latest_update': latest_data.updated_time,
                 'country': {
                     'name': 'United States of America',
@@ -67,7 +95,14 @@ def get_covid_cases():
                     'name': county,
                     **region_data[state][county],
                 }
-            })
+            }
+
+            if zipcode in travis_data:
+                res['zipcode'] = {
+                    'confirmed': travis_data[zipcode]
+                }
+
+            return jsonify(res)
     else:
         return jsonify({
             'latest_update': latest_data.updated_time,
@@ -96,18 +131,12 @@ def usa_country_wide():
 @info_api.route('/refresh', methods=['GET'])
 def refresh_data():
     try:
-        # find the latest file in JHU dataset
-        g = Github()
-        repo = g.get_repo('CSSEGISandData/COVID-19')
-        contents = repo.get_contents('csse_covid_19_data/csse_covid_19_daily_reports')
-        contents = [x for x in contents if x.name.endswith('.csv')]
-        contents.sort(key=lambda x: x.last_modified)
-        file = contents[-1]
-
         # US country-level
         us_confirmed, us_recovered, us_deaths = usa_country_wide()
 
-        stream = urllib.request.urlopen(file.download_url)
+        jhu_file_url = get_latest_file_url('CSSEGISandData/COVID-19', 'csse_covid_19_data/csse_covid_19_daily_reports',
+                                           'csv')
+        stream = urllib.request.urlopen(jhu_file_url)
         csvfile = csv.reader(codecs.iterdecode(stream, 'utf-8'))
         last_update = ''
 
@@ -143,7 +172,7 @@ def refresh_data():
                       region_data=json.dumps(region_data)).save()
         except:
             # has record with the same updated time
-            pass
+            return jsonify({'msg': 'Record exists.'})
 
         return jsonify({'msg': 'Refreshed'})
     except:
