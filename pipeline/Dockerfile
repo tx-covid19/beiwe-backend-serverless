@@ -15,19 +15,38 @@ RUN ["apt-key", "adv", "--keyserver", "keyserver.ubuntu.com", "--recv-keys", "E2
 RUN ["add-apt-repository", "deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/"]
 RUN ["apt", "update"]
 RUN ["apt", "install", "-y", "r-base"]
+RUN ["apt", "install", "-y", "nodejs"]
+RUN ["apt", "install", "-y", "vim"]
 
 
-# Work from home directory
-WORKDIR /home
+RUN ["useradd", "-ms", "/bin/bash", "beiwe-user"]
+WORKDIR /home/beiwe-user
 
 # Move the directory into the corresponding directory in the container
 # ADD Beiwe-Analysis Beiwe-Analysis
 ADD beiwe-backend beiwe-backend
+RUN chown -R beiwe-user.beiwe-user beiwe-backend
 
 # Install python requirements
+USER beiwe-user
 RUN ["pip3", "install", "--upgrade", "pip"]
 RUN ["pip3", "install", "-r", "beiwe-backend/requirements.txt"]
 RUN ["pip3", "install", "-r", "beiwe-backend/pipeline/Beiwe-Analysis/Pipeline/python3-requirements.txt"]
+RUN ["pip3", "install", "jupyterlab"]
+ENV PATH="/home/beiwe-user/.local/bin:${PATH}"
 
 # Install R requirements
-RUN ["Rscript", "--vanilla", "beiwe-backend/pipeline/Beiwe-Analysis/Summary/install_required_packages.R"]
+#RUN ["Rscript", "--vanilla", "beiwe-backend/pipeline/Beiwe-Analysis/Summary/install_required_packages.R"]
+
+# setup jupyter lab
+RUN ["openssl", "req", "-x509", "-nodes", "-days", "365", "-newkey", "rsa:2048", "-keyout", "mycert.pem", "-out", "mycert.pem", "-subj", "/C=US/ST=Texas/L=Austin/O=University of Texas at Austin/OU=Whole Communities Whole Health/CN=localhost"]
+RUN ["jupyter", "lab", "--generate-config"]
+RUN ["cp", "beiwe-backend/pipeline/jupyter_notebook_config.py", ".jupyter/jupyter_notebook_config.py"]
+
+# Add Tini. Tini operates as a process subreaper for jupyter. This prevents kernel crashes.
+ENV TINI_VERSION v0.6.0
+ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /home/beiwe-user/.local/bin/tini
+USER root
+RUN  chown beiwe-user.beiwe-user /home/beiwe-user/.local/bin/tini && chmod +x /home/beiwe-user/.local/bin/tini
+USER beiwe-user
+ENTRYPOINT ["/home/beiwe-user/.local/bin/tini", "--"]

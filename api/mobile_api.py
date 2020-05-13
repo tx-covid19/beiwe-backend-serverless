@@ -187,6 +187,8 @@ def register_user(OS_API=""):
     phone_number = request.values['phone_number']
     device_id = request.values['device_id']
 
+    print(f"register {patient_id}: received registration for device {device_id}")
+
     # These values may not be returned by earlier versions of the beiwe app
     try: device_os = request.values['device_os']
     except BadRequestKeyError: device_os = "none"
@@ -219,12 +221,14 @@ def register_user(OS_API=""):
         # unique identifier) they user CAN reregister an existing device, the unlock key they
         # need to enter to at registration is their old password.
         # KG: 405 is good for IOS and Android, no need to check OS_API
+        print(f"register {patient_id}: Device {user.device_id} already registered for user, what is {device_id}?")
         return abort(405)
     
     if user.os_type and user.os_type != OS_API:
         # CASE: this patient has registered, but the user was previously registered with a
         # different device type. To keep the CSV munging code sane and data consistent (don't
         # cross the iOS and Android data streams!) we disallow it.
+        print(f"register {patient_id}: Device with operating system {user.os_type} already registered for user, cannot switch to {user.os_type}")
         return abort(400)
     
     # At this point the device has been checked for validity and will be registered successfully.
@@ -242,6 +246,7 @@ def register_user(OS_API=""):
                       beiwe_version)).encode()
     # print(file_contents + "\n")
     s3_upload(file_name, file_contents, study_id)
+    print(f"register {patient_id}: create {file_name} for pt identifiers")
     FileToProcess.append_file_for_processing(file_name, user.study.object_id, participant=user)
 
     # set up device.
@@ -250,8 +255,10 @@ def register_user(OS_API=""):
     user.set_password(request.values['new_password'])
     device_settings = user.study.device_settings.as_native_python()
     device_settings.pop('_id', None)
+    print(f"register {patient_id}: storing user {user.patient_id}")
     return_obj = {'client_public_key': get_client_public_key_string(patient_id, study_id),
                   'device_settings': device_settings}
+
     return json.dumps(return_obj), 200
 
 
