@@ -8,7 +8,7 @@ from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
 
 from config.constants import (API_TIME_FORMAT, CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES,
-    CHUNKS_FODLER, IDENTIFIERS, PIPELINE_FOLDER, RAW_DATA_FOLDER, REVERSE_UPLOAD_FILE_TYPE_MAPPING)
+    CHUNKS_FOLDER, IDENTIFIERS, PIPELINE_FOLDER, RAW_DATA_FOLDER, REVERSE_UPLOAD_FILE_TYPE_MAPPING)
 
 from database.models import AbstractModel
 from database.study_models import Study
