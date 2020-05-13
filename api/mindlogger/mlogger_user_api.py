@@ -3,15 +3,24 @@ import datetime
 import hashlib
 import json
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, abort
 from flask_jwt_extended import (
-    create_access_token, jwt_required, get_jwt_identity
+    create_access_token, jwt_required, get_jwt_identity, get_raw_jwt
 )
 
+from app import blacklist
 from database.applet_model import DeviceInfo
 from database.user_models import Participant
 
 user_api = Blueprint('user_api', __name__)
+
+
+def register_device():
+    pass
+
+
+def unregister_device():
+    pass
 
 
 @user_api.route('/authentication', methods=['GET'])
@@ -56,7 +65,8 @@ def authentication():
 
     expires = datetime.timedelta(days=365)
     token = create_access_token(user_id, expires_delta=expires)
-    return {"authToken": {"expires": "2020-10-31T21:38:46.118970+00:00",
+    expire_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return {"authToken": {"expires": expire_time,
                           "scope": ["core.user_auth"],
                           "token": token
                           },
@@ -78,9 +88,21 @@ def authentication():
             }
 
 
+@user_api.route('/authentication', methods=['DELETE'])
+@jwt_required
+def logout():
+    try:
+        jti = get_raw_jwt()['jti']
+        blacklist.add(jti)
+        unregister_device()
+        return jsonify({'message': 'Log out successfully.'}), 200
+    except:
+        return abort(400)
+
+
 @user_api.route('/applets', methods=['GET'])
 @jwt_required
-def get_applets():
+def get_own_applets():
     patient_id = get_jwt_identity()
     res_list = []
     try:
@@ -105,7 +127,7 @@ def get_applets():
         return jsonify(res_list), 200
 
 
-# always return empty
+# always return empty array
 @user_api.route('/invites', methods=['GET'])
 def get_invites():
     return jsonify([]), 200
