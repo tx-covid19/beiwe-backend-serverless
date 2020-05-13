@@ -53,9 +53,10 @@ BOX_registration_callback = getenv('BOX_registration_callback')
 
 PIPELINE_SG = getenv('PIPELINE_SG')
 
-# Redcap credentials
-REDCAP_SERVER_URL = getenv('REDCAP_SERVER_URL')
-REDCAP_API_TOKEN = getenv('REDCAP_API_TOKEN')
+# Redcap information
+REDCAP_CONSENT_FORM_NAME = getenv('REDCAP_CONSENT_FORM_NAME', 'online_consent_form')
+REDCAP_BEIWE_USERNAME_FIELD = getenv('REDCAP_BEIWE_USERNAME_FIELD', 'beiwe_username')
+REDCAP_BEIWE_PASSWORD_FIELD = getenv('REDCAP_BEIWE_PASSWORD_FIELD', 'beiwe_password')
 
 CDN_DOMAIN = getenv('CDN_DOMAIN')
 
