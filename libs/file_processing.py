@@ -9,7 +9,9 @@ from multiprocessing.pool import ThreadPool
 from pprint import pprint
 from typing import DefaultDict, Generator, List, Tuple
 
+from botocore.exceptions import ReadTimeoutError
 from cronutils.error_handler import ErrorHandler
+from django.core.exceptions import ValidationError
 
 # noinspection PyUnresolvedReferences
 from config import load_django
@@ -32,14 +34,13 @@ logging.basicConfig()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-class OldBotoImportThatNeedsFixingError(Exception): pass
 class EverythingWentFine(Exception): pass
 class ProcessingOverlapError(Exception): pass
 
 file_processing_func = {
-            SURVEY_TIMINGS: process_survey_timings_data,
-            ANDROID_LOG_FILE: process_android_log_data,
-        }
+    SURVEY_TIMINGS: process_survey_timings_data,
+    ANDROID_LOG_FILE: process_android_log_data,
+}
 
 """########################## Hourly Update Tasks ###########################"""
 
@@ -367,6 +368,7 @@ def do_process_user_file_chunks(count: int, error_handler: ErrorHandler, skip_co
                 raise data['exception']
 
             if data['chunkable']:
+                # case: chunkable data files
                 newly_binified_data, survey_id_hash = process_csv_data(data)
                 if data['data_type'] in SURVEY_DATA_FILES:
                     survey_id_dict[survey_id_hash] = resolve_survey_id_from_file_name(data['ftp']["s3_file_path"])
@@ -376,21 +378,39 @@ def do_process_user_file_chunks(count: int, error_handler: ErrorHandler, skip_co
                 else:  # delete empty files from FilesToProcess
                     ftps_to_remove.add(data['ftp']['id'])
                 continue
-
-            # if not data['chunkable']
             else:
+                # case: unchunkable data file
                 timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
                 # Since we aren't binning the data by hour, just create a ChunkRegistry that
                 # points to the already existing S3 file.
-                ChunkRegistry.register_unchunked_data(
-                    data['data_type'],
-                    timestamp,
-                    data['ftp']['s3_file_path'],
-                    data['ftp']['study'].pk,
-                    data['ftp']['participant'].pk,
-                    data['file_contents'],
-                )
-                ftps_to_remove.add(data['ftp']['id'])
+                try:
+                    ChunkRegistry.register_unchunked_data(
+                        data['data_type'],
+                        timestamp,
+                        data['ftp']['s3_file_path'],
+                        data['ftp']['study'].pk,
+                        data['ftp']['participant'].pk,
+                        data['file_contents'],
+                    )
+                    ftps_to_remove.add(data['ftp']['id'])
+                except ValidationError as ve:
+                    if len(ve.messages) != 1:
+                        # case: the error case (below) is very specific, we only want that singular error.
+                        raise
+
+                    # case: an unchunkable file was re-uploaded, causing a duplicate file path collision
+                    # we detect this specific case and update the registry with the new file size
+                    # (hopefully it doesn't actually change)
+                    if 'Chunk registry with this Chunk path already exists.' in ve.messages:
+                        ChunkRegistry.update_registered_unchunked_data(
+                            data['data_type'],
+                            data['ftp']['s3_file_path'],
+                            data['file_contents'],
+                        )
+                        ftps_to_remove.add(data['ftp']['id'])
+                    else:
+                        # any other errors, add
+                        raise
 
     pool.close()
     pool.terminate()
@@ -454,6 +474,7 @@ def upload_binified_data(binified_data, error_handler, survey_id_dict):
                 print("FAILED TO UPDATE: study_id:%s, user_id:%s, data_type:%s, time_bin:%s, header:%s "
                       % (study_id, user_id, data_type, time_bin, updated_header))
                 raise
+
             else:
                 # If no exception was raised, the FTP has completed processing. Add it to the set of
                 # retireable (i.e. completed) FTPs.
@@ -639,7 +660,7 @@ def process_csv_data(data: dict):
 """############################ CSV Fixes #####################################"""
 
 
-def fix_survey_timings(header: bytes, rows_list: List[bytes], file_path: str) -> bytes:
+def fix_survey_timings(header: bytes, rows_list: List[List[bytes]], file_path: str) -> bytes:
     """ Survey timings need to have a column inserted stating the survey id they come from."""
     survey_id = file_path.rsplit("/", 2)[1].encode()
     for row in rows_list:
@@ -807,7 +828,7 @@ def batch_retrieve_for_processing(ftp_as_object: FileToProcess) -> dict:
     # Try to retrieve the file contents. If any errors are raised, store them to be raised by the
     # parent function
     try:
-        print(ftp['s3_file_path'] + ", getting data...")
+        # print(ftp['s3_file_path'] + ", getting data...")
         ret['file_contents'] = s3_retrieve(ftp['s3_file_path'], ftp["study"].object_id.encode(), raw_path=True)
     except Exception as e:
         traceback.print_exc()
@@ -822,7 +843,7 @@ def batch_upload(upload: Tuple[dict, str, bytes, str]):
     try:
         if len(upload) != 4:
             # upload should have length 4; this is for debugging if it doesn't
-            print(upload)
+            print("upload length not equal to 4: ",upload)
         chunk, chunk_path, new_contents, study_object_id = upload
         del upload
 
@@ -830,7 +851,7 @@ def batch_upload(upload: Tuple[dict, str, bytes, str]):
             raise Exception(chunk_path)
 
         s3_upload(chunk_path, codecs.decode(new_contents, "zip"), study_object_id, raw_path=True)
-        print("data uploaded!", chunk_path)
+        # print("data uploaded!", chunk_path)
 
         if isinstance(chunk, ChunkRegistry):
             # If the contents are being appended to an existing ChunkRegistry object
@@ -873,7 +894,7 @@ class ChunkFailedToExist(Exception): pass
 # This is useful for performance testing, replace the real threadpool with this one and everything
 # will suddenly be single-threaded, making it much easier to profile.
 # class ThreadPool():
-#     def map(self, *args, **kwargs): #the existance of that self variable is key
+#     def map(self, *args, **kwargs): # the existence of that self variable is key
 #         # we actually want to cut off any threadpool args, which is conveniently easy because map does not use kwargs!
 #         return map(*args)
 #     def terminate(self): pass

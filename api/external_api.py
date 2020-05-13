@@ -176,8 +176,7 @@ def fitbit_request():
         
     access_token = create_access_token(patient_id)
 
-    url = 'https://fitbit.com/oauth2/authorize?response_type=code&client_id={client_id}&scope={scope}&state={state}&redirect_uri={redirect_uri}'
-        .format(
+    url = 'https://fitbit.com/oauth2/authorize?response_type=code&client_id={client_id}&scope={scope}&state={state}&redirect_uri={redirect_uri}'.format(
             client_id=FITBIT_CLIENT_ID,
             state=jwt_token,
             scope='%20'.join(SCOPES),

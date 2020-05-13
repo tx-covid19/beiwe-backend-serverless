@@ -22,18 +22,26 @@ DATETIME_FORMAT_ERROR = \
     f"Dates and times provided to this endpoint must be formatted like this: 2010-11-22 ({REDUCED_API_TIME_FORMAT})"
 
 
+def get_study_or_404(study_id):
+    try:
+        return Study.objects.get(pk=study_id)
+    except Study.DoesNotExist:
+        return abort(404)
+
+
 @dashboard_api.route("/dashboard/<string:study_id>", methods=["GET"])
 @authenticate_researcher_study_access
 def dashboard_page(study_id):
-    study = get_study_or_404(study_id)
     """ information for the general dashboard view for a study"""
+
+    study = get_study_or_404(study_id)
     participants = list(Participant.objects.filter(study=study_id, device_id__isnull=False).exclude(device_id='').\
             values_list("patient_id", flat=True).order_by('patient_id'))
 
     all_survey_streams = {}
-    for survey in Survey.objects.filter(study=study_id):
+    for survey in Survey.objects.filter(study=study_id).exclude(deleted=True):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     ## update the total list of streams
     data_stream_dict = {}
@@ -54,22 +62,15 @@ def dashboard_page(study_id):
 @dashboard_api.route("/dashboard/<string:study_id>/data_stream/<string:data_stream>", methods=["GET", "POST"])
 @authenticate_researcher_study_access
 def get_data_for_dashboard_datastream_display(study_id, data_stream):
-
-    """ parses information for the data stream dashboard view GET and POST requests"""
-    # left the post and get requests in the same function because the body of the get request relies on the variables
-    # set in the post request if a post request is sent --thus if a post request is sent we don't want all of the get
-    # request running
+    """ Parses information for the data stream dashboard view GET and POST requests left the post
+    and get requests in the same function because the body of the get request relies on the
+    variables set in the post request if a post request is sent --thus if a post request is sent
+    we don't want all of the get request running. """
     study = get_study_or_404(study_id)
 
-    # -------------------------- for a POST request --------------------------------------
     if request.method == "POST":
         color_low_range, color_high_range, all_flags_list = set_default_settings_post_request(study, data_stream)
-        if color_low_range == 0 and color_high_range == 0:
-            show_color = "false"
-        else:
-            show_color = "true"
-
-    # ------------------ below is for a GET request - POST requests will ALSO run this code! ------------------------
+        show_color = "false" if color_low_range == 0 and color_high_range == 0 else "true"
     else:
         color_low_range, color_high_range, show_color = extract_range_args_from_request()
         all_flags_list = extract_flag_args_from_request()
@@ -78,6 +79,8 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     if DashboardColorSetting.objects.filter(data_type=data_stream, study=study).exists():
         settings = DashboardColorSetting.objects.get(data_type=data_stream, study=study)
         default_filters = DashboardColorSetting.get_dashboard_color_settings(settings)
+    else:
+        settings = None
 
     # -------------------------------- dealing with color settings -------------------------------------------------
     # test if there are default settings saved,
@@ -85,10 +88,11 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
     if default_filters != "":
         inflection_info = default_filters["inflections"]
         if all_flags_list == [] and color_high_range is None and color_low_range is None:
-            # since none of the filters are set, parse default filters to pass in the default settings
-            # set the values for gradient filter
-            # backend: color_range_min, color_range_max --> frontend: color_low_range, color_high_range
-            # the above is consistent throughout the back and front ends
+            # since none of the filters are set, parse default filters to pass in the default
+            # settings set the values for gradient filter
+
+            # backend: color_range_min, color_range_max --> frontend: color_low_range,
+            # color_high_range the above is consistent throughout the back and front ends
             if settings.gradient_exists():
                 gradient_info = default_filters["gradient"]
                 color_low_range = gradient_info["color_range_min"]
@@ -103,14 +107,11 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
             # the html is expecting a list of lists for the flags [[operator, value], ... ]
             all_flags_list = []
             for flag_info in inflection_info:
-                single_flag = [flag_info["operator"].encode("utf-8"), flag_info["inflection_point"]]
+                single_flag = [flag_info["operator"], flag_info["inflection_point"]]
                 all_flags_list.append(single_flag)
 
     # change the url params from jinja t/f to python understood T/F
-    if show_color == "true":
-        show_color = True
-    elif show_color == "false":
-        show_color = False
+    show_color = True if show_color == "true" else False
 
     # -----------------------------------  general data fetching --------------------------------------------
     start, end = extract_date_args_from_request()
@@ -129,15 +130,16 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
 
     # calculate stream names for the study's surveys
     all_survey_streams = {}
-    for survey in Survey.objects.filter(study=study_id):
+    for survey in Survey.objects.filter(study=study_id).exclude(deleted=True):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'{survey.name} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     data_stream_dict = {}
     data_stream_dict.update(complete_data_stream_dict)
     data_stream_dict.update(all_survey_streams)
 
     if data_stream in ALL_DATA_STREAMS:
+
         first_data_date, last_data_date, stream_data = \
                 parse_data_stream_chunk_data(study_id, data_stream)
 
@@ -251,9 +253,9 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
 
     # calculate stream names for the study's surveys
     all_survey_streams = {}
-    for survey in Survey.objects.filter(study=study_id):
+    for survey in Survey.objects.filter(study=study_id).exclude(deleted=True):
         for event in ['notified', 'submitted', 'expired']:
-            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.object_id} {event}'})
+            all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     ## update the total list of streams
     data_stream_dict = {}
@@ -451,7 +453,7 @@ def parse_processed_data(study_id, participant_objects, data_stream):
         if pipeline_chunks is not None:
             for chunk in pipeline_chunks:
                 if data_stream in chunk and "day" in chunk and chunk[data_stream] != "NA":
-                    time_bin = datetime.strptime(chunk["day"].encode("utf-8"), REDUCED_API_TIME_FORMAT).date()
+                    time_bin = datetime.strptime(chunk["day"], REDUCED_API_TIME_FORMAT).date()
                     data_exists = True
                     if first:
                         first_day = time_bin
@@ -463,7 +465,7 @@ def parse_processed_data(study_id, participant_objects, data_stream):
                         elif (time_bin - last_day).days > 0:
                             last_day = time_bin
                     # check to see if the data should be a float or an int
-                    if chunk[data_stream].encode("utf-8").find(".") == -1:
+                    if chunk[data_stream].find(".") == -1:
                         processed_data = int(chunk[data_stream])
                     else:
                         processed_data = float(chunk[data_stream])
@@ -475,7 +477,8 @@ def parse_processed_data(study_id, participant_objects, data_stream):
 
 
 def parse_patient_processed_data(study_id, participant):
-    """    create a list of dicts of processed data for one patient.
+    """
+    Create a list of dicts of processed data for one patient.
     [{"time_bin": , "processed_data": , "data_stream": ,}...]
     if there is no data for a patient, first_day and last_day will be None, and all_data will be an empty list
     """
@@ -487,7 +490,7 @@ def parse_patient_processed_data(study_id, participant):
     if pipeline_chunks is not None:
         for chunk in pipeline_chunks:
             if "day" in chunk:
-                time_bin = datetime.strptime(chunk["day"].encode("utf-8"), REDUCED_API_TIME_FORMAT).date()
+                time_bin = datetime.strptime(chunk["day"], REDUCED_API_TIME_FORMAT).date()
                 if first:
                     first_day = time_bin
                     last_day = time_bin
@@ -499,7 +502,7 @@ def parse_patient_processed_data(study_id, participant):
                         last_day = time_bin
                 for stream_key in chunk:
                     if stream_key in processed_data_stream_dict and chunk[stream_key] != "NA":
-                        if chunk[stream_key].encode("utf-8").find(".") == -1:
+                        if chunk[stream_key].find(".") == -1:
                             processed_data = int(chunk[stream_key])
                         else:
                             processed_data = float(chunk[stream_key])
@@ -508,7 +511,6 @@ def parse_patient_processed_data(study_id, participant):
 
 
 def set_default_settings_post_request(study, data_stream):
-    # get all of the variables
     all_flags_list = request.form.get("all_flags_list", "[]")
     color_high_range = request.form.get("color_high_range", 0)
     color_low_range = request.form.get("color_low_range", 0)
@@ -525,14 +527,14 @@ def set_default_settings_post_request(study, data_stream):
         color_low_range = int(json.loads(color_low_range))
         color_high_range = int(json.loads(color_high_range))
 
+    # Should be unnecessary in in python?
     # make the operator a string
-    for flag in all_flags_list:
-        flag[0] = flag[0].encode("utf-8")
+    # for flag in all_flags_list:
+    #     flag[0] = flag[0].encode("utf-8")
 
     # try to get a DashboardColorSetting object and check if it exists
     if DashboardColorSetting.objects.filter(data_type=data_stream, study=study).exists():
-        # in this case, a default settings model already exists
-        # now we delete the inflections associated with it
+        # case: a default settings model already exists; delete the inflections associated with it
         settings = DashboardColorSetting.objects.get(data_type=data_stream, study=study)
         settings.inflections.all().delete()
         if settings.gradient_exists():
@@ -576,13 +578,6 @@ def set_default_settings_post_request(study, data_stream):
     return color_low_range, color_high_range, all_flags_list
 
 
-def get_study_or_404(study_id):
-    try:
-        return Study.objects.get(pk=study_id)
-    except Study.DoesNotExist:
-        return abort(404)
-
-
 def get_unique_dates(start, end, first_day, last_day, chunks=None):
     """ create a list of all the unique days in which data was recorded for this study """
     first_date_data_entry = None
@@ -604,22 +599,24 @@ def get_unique_dates(start, end, first_day, last_day, chunks=None):
         end = temp
 
     # unique_dates is all of the dates for the week we are showing
-    if start is None: # if start is none default to end
+    if start is None:  # if start is none default to end
         end_num = min((last_day - first_day).days + 1, 7)
         unique_dates = [(last_day - timedelta(days=end_num - 1)) + timedelta(days=date) for date in range(end_num)]
         # unique_dates = [(first_day + timedelta(days=date)) for date in range(end_num)]
-    elif end is None:  # if end if none default to 7 days
+    elif end is None:
+        # if end is none default to 7 days
         end_num = min((last_day - start.date()).days + 1, 7)
         unique_dates = [(start.date() + timedelta(days=date)) for date in range(end_num)]
     elif (start.date() - first_day).days < 0:
-        # this is the edge case for out of bounds at beginning to keep the duration the same
+        # case: out of bounds at beginning to keep the duration the same
         end_num = (end.date() - first_day).days + 1
         unique_dates = [(first_day + timedelta(days=date)) for date in range(end_num)]
     elif (last_day - end.date()).days < 0:
-        # this is the edge case for out of bounds at end to keep the duration the same
+        # case: out of bounds at end to keep the duration the same
         end_num = (last_day - start.date()).days + 1
         unique_dates = [(start.date() + timedelta(days=date)) for date in range(end_num)]
-    else:  # this is if they specify both start and end
+    else:
+        # case: if they specify both start and end
         end_num = (end.date() - start.date()).days + 1
         unique_dates = [(start.date() + timedelta(days=date)) for date in range(end_num)]
 
@@ -708,7 +705,7 @@ def get_bytes_patient_processed_match(participant_data, date, stream):
     # stream for this participant
     if participant_data is not None:
         for data_point in participant_data:
-            if(data_point["time_bin"]) == date and data_point["data_stream"] == stream:
+            if (data_point["time_bin"]) == date and data_point["data_stream"] == stream:
                 return data_point["processed_data"]
     return None
 
@@ -797,11 +794,11 @@ def extract_flag_args_from_request():
     all_flags_string = request.values.get("flags", "")
     all_flags_list = []
     # parse to create a dict of flags
-    flags_seperated = all_flags_string.split('*')
-    for flag in flags_seperated:
+    flags_separated = all_flags_string.split('*')
+    for flag in flags_separated:
         if flag != "":
             flag_apart = flag.split(',')
-            string = flag_apart[0].encode("utf-8")
+            string = flag_apart[0]
             all_flags_list.append([string, int(flag_apart[1])])
     return all_flags_list
 

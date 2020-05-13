@@ -39,8 +39,8 @@ if __name__ == "__main__":
 
         for pt in study.participants.filter(device_id__isnull=False):
 
-            if pt.patient_id not in ['286vqdjn', '25rlmdr1']:
-                continue
+            #if pt.patient_id not in ['286vqdjn', '25rlmdr1']:
+                #continue
 
             out_dir = os.path.join(args.out_dir, pt.patient_id)
             os.makedirs(out_dir, exist_ok=True)
@@ -64,3 +64,5 @@ if __name__ == "__main__":
                     file_contents = s3_retrieve(chunk.chunk_path, study.object_id, raw_path=True)
                     with open(out_filename, 'wb') as ofd:
                         ofd.write(file_contents)
+
+        print(f'finished downloading data')

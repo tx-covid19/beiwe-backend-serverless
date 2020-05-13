@@ -24,15 +24,11 @@ FILE_PROCESS_PAGE_SIZE = getenv("FILE_PROCESS_PAGE_SIZE") or 250
 # This string will be printed into non-error hourly reports to improve error filtering.
 DATA_PROCESSING_NO_ERROR_STRING = getenv("DATA_PROCESSING_NO_ERROR_STRING") or "2HEnBwlawY"
 
-# The number of minutes after which a queued celery task will be invalidated.
-# (this is not a timeout, it only invalidates tasks that have not yet run.)
-CELERY_EXPIRY_MINUTES = getenv("CELERY_EXPIRY_MINUTES") or 14
-CELERY_ERROR_REPORT_TIMEOUT_SECONDS = getenv("CELERY_ERROR_REPORT_TIMEOUT_SECONDS") or 60*15
-
 # Data streams and survey types
 ALLOWED_SELFIE_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 ALLOWED_EXTENSIONS = {'csv', 'json', 'mp4', "wav", 'txt', 'jpg'}
 PROCESSABLE_FILE_EXTENSIONS = [".csv", ".mp4", ".wav"]
+
 # These don't appear to be used...
 MEDIA_EXTENSIONS = [".mp4", ".wav", ".jpg"]
 FILE_TYPES = ['gps', 'accel', 'voiceRecording', 'powerState', 'callLog', 'textLog',
@@ -233,6 +229,7 @@ UPLOAD_FILE_TYPE_MAPPING = {
     "proximity": PROXIMITY,
     "ios_log": IOS_LOG_FILE,
     "imageSurvey": IMAGE_FILE,
+    "identifiers": IDENTIFIERS,  # not processed through data upload.
 }
 
 # this is mostly used for debugging and scripting
