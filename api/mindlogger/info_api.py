@@ -64,14 +64,14 @@ def get_covid_cases():
         latest_data = CovidCase.objects.latest('updated_time')
         region_data: dict = json.loads(latest_data.region_data)
     except:
-        return jsonify({'msg': 'No data found.'})
+        return jsonify({'msg': 'No data found.'}), 403
 
     zipcode = request.args.get('zipcode', '')
     travis_data = get_travis_data()
     if zipcode:
         county, state = map_zipcode_to_county(zipcode)
         if county is None or state is None:
-            return jsonify({'msg': 'zipcode not found.'})
+            return jsonify({'msg': 'zipcode not found.'}), 404
         else:
             state_data = {
                 k: sum(
