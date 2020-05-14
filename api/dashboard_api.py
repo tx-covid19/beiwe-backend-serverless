@@ -45,7 +45,8 @@ def dashboard_page(study_id):
 
     ## update the total list of streams
     data_stream_dict = {}
-    data_stream_dict.update(complete_data_stream_dict)
+    #data_stream_dict.update(complete_data_stream_dict)
+    data_stream_dict.update({data_stream:complete_data_stream_dict[data_stream] for data_stream in ALL_DATA_STREAMS})
     data_stream_dict.update(all_survey_streams)
 
     return render_template(
@@ -135,7 +136,8 @@ def get_data_for_dashboard_datastream_display(study_id, data_stream):
             all_survey_streams.update({f'survey_{survey.object_id}_{event}': f'Survey {survey.name} {event}'})
 
     data_stream_dict = {}
-    data_stream_dict.update(complete_data_stream_dict)
+    #data_stream_dict.update(complete_data_stream_dict)
+    data_stream_dict.update({data_stream:complete_data_stream_dict[data_stream] for data_stream in ALL_DATA_STREAMS})
     data_stream_dict.update(all_survey_streams)
 
     if data_stream in ALL_DATA_STREAMS:
@@ -260,7 +262,8 @@ def get_data_for_dashboard_patient_display(study_id, patient_id):
 
     ## update the total list of streams
     data_stream_dict = {}
-    data_stream_dict.update(complete_data_stream_dict)
+    #data_stream_dict.update(complete_data_stream_dict)
+    data_stream_dict.update({data_stream:complete_data_stream_dict[data_stream] for data_stream in ALL_DATA_STREAMS})
     data_stream_dict.update(all_survey_streams)
 
     # -------------------------  edge case if no data has been entered -----------------------------------
