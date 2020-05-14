@@ -1,17 +1,38 @@
 import os
 import sys
+import base64
 from collections import defaultdict
 from datetime import datetime
+import requests
+import traceback
+
+import fitbit
+from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
 
 # noinspection PyUnresolvedReferences
 from config import load_django
 from config.fitbit_constants import TIME_SERIES_TYPES
-from config.settings import (FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET, IS_SERVERLESS)
+from config.settings import (FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET, FITBIT_REDIRECT_URL, IS_SERVERLESS)
 
+from database.fitbit_models import (FitbitRecord, FitbitCredentials)
+from database.user_models import Participant
+
+from pipeline.boto_helpers import get_boto_client
 
 FITBIT_RECORDS_LAMBDA_NAME = 'beiwe-fitbit-lambda'
 FITBIT_RECORDS_LAMBDA_RULE = 'beiwe-fitbit-{}-lambda'
 
+SCOPES = [
+    'profile',
+    'activity',
+    'heartrate',
+    'location',
+    'nutrition',
+    'settings',
+    'sleep',
+    'social',
+    'weight'
+]
 
 def create_fitbit_records_trigger(credential):
 
@@ -114,3 +135,72 @@ def do_process_fitbit_records_lambda_handler(event, context):
 def recreate_firbit_records_trigger():
     for credential in FitbitCredentials.objects.all():
         create_fitbit_records_trigger(credential)
+
+    
+def get_client_token():
+    return base64.b64encode(
+        "{}:{}".format(
+            FITBIT_CLIENT_ID,
+            FITBIT_CLIENT_SECRET
+        ).encode('utf-8')).decode('utf-8')
+
+
+def redirect(patient_id):
+
+    access_token = create_access_token(patient_id)
+
+    url = 'https://fitbit.com/oauth2/authorize?response_type=code&client_id={client_id}&scope={scope}&state={state}&redirect_uri={redirect_uri}' \
+        .format(
+            client_id=FITBIT_CLIENT_ID,
+            state=access_token,
+            scope='%20'.join(SCOPES),
+            redirect_uri=FITBIT_REDIRECT_URL,
+        )
+
+    return url
+        
+
+def authorize(code, state):
+    try:
+        patient_id = decode_token(state)['identity']
+        participant = Participant.objects.get(patient_id__exact=patient_id)
+    except:
+        raise Exception('INVALID_USER')
+
+    try:
+        r = requests.post(
+            'https://api.fitbit.com/oauth2/token?code={code}&client_id={client_id}&redirect_uri={url}&grant_type=authorization_code'.format(
+                code=code,
+                client_id=FITBIT_CLIENT_ID,
+                url=FITBIT_REDIRECT_URL,
+            ),
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': 'Basic {}'.format(get_client_token()),
+            },
+            timeout=60
+        )
+
+        resp = r.json()
+        access_token = resp['access_token']
+        refresh_token = resp['refresh_token']
+
+        print(access_token)
+
+        records = FitbitCredentials.objects.filter(user__patient_id__exact=patient_id)
+        if records.exists():
+            record: FitbitCredentials = records.get()
+            record.access_token = access_token
+            record.refresh_token = refresh_token
+            record.save()
+        else:
+            record = FitbitCredentials(access_token=access_token, refresh_token=refresh_token, user=participant)
+            record.save()
+    except Exception as e:
+        traceback.print_exc()
+        raise Exception('INTERNAL_ERROR')
+
+    try:
+        create_fitbit_records_trigger(record)
+    except:
+        pass

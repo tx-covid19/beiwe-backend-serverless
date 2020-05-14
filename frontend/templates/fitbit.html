@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Upload your screenshots">
+    <meta name="author" content="Cameron Craddock">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sticky-footer.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-4.min.css') }}">
+    <title>Connect your Fitbit!</title>
+
+    <link rel="icon" href="{{ url_for('static', filename='images/cropped-Slide1-32x32.jpg') }}" sizes="32x32" />
+    <link rel="icon" href="{{ url_for('static', filename='images/cropped-Slide1-192x192.jpg') }}" sizes="192x192" />
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/cropped-Slide1-180x180.jpg') }}" />
+    <meta name="msapplication-TileImage" content="{{ url_for('static', filename='images/cropped-Slide1-270x270.jpg') }}" />
+</head>
+
+<body>
+    <main role="main" class="container">
+        <div class="container">
+            <div style="background:rgb(191,87,0) !important; color:white !important;" class="jumbotron">
+                <h1>Connect your Fitbit!</h1>
+                <p class="font-italic">Behavioral & Psychological Responses to the COVID-19 Pandemic: A SmartPhone Sensing Study</p>
+            </div>
+
+            <form class="border border-0 pt-4 pl-4 pr-4 pb-1 bg-white" action="" method="POST" enctype="multipart/form-data">
+                <div class="form-row">
+                    <p>Please inform your Beiwe credentials to be redirected to the Fitbit platform for authorization.</p>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                <div id="callback" class="form-row alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% else %}
+                <div id="callback" class="form-row"> </div>
+                    {% endif %}
+                {% endwith %}
+
+                <div class="form-row form-group">
+                    <input type="user-text-field" class="form-control" name="username" placeholder="Beiwe Username" autocomplete="username" required>
+                </div>
+                <div class="form-row form-group">
+                    <input id="password-text-field" type="password" class="form-control" name="password" placeholder="Beiwe Password" autocomplete="current-password" required>
+                </div>
+
+                <div class="form-row form-group">
+                    <button type="submit" name="upload" value="upload" id="upload" class="btn btn-block btn-success float-right mt-3">Authorize</button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container text-center">
+            <p class="font-italic">Copyright 2020, The University of Texas at Austin, <a href="https://bridgingbarriers.utexas.edu/whole-communities-whole-health/">Whole Communities Whole Health</p>
+        </div>
+    </footer>
+
+	<script src="{{ url_for('static', filename='javascript/libraries/jquery-3.5.0.min.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/libraries/popper.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/libraries/bootstrap-4.min.js') }}"></script>
+    <script type="text/javascript">
+
+        $(document).ready(function () {
+            $('.custom-file input').change(function (e) {
+
+		$(this).next('.custom-file-label').removeClass('alert-danger alert-success').html('');
+
+		let total_file_size = 0;
+		for (index = 0; index < e.target.files.length; index++) {
+                    total_file_size += e.target.files[index].size / 1024 / 1024;
+                }
+
+		    if(total_file_size > 5) {
+		        $(this).next('.custom-file-label').addClass('alert-danger').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB > 5MB`);
+		    } else {
+		        $(this).next('.custom-file-label').addClass('alert-success').html(`${e.target.files.length} file(s) totalling ${total_file_size.toPrecision(4)} MB`);
+		    }
+
+            });
+        });
+
+    </script>
+
+</body>
+
+</html>
