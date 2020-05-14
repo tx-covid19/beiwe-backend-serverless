@@ -5,22 +5,15 @@ import json
 
 from flask import Blueprint, request, jsonify, abort
 from flask_jwt_extended import (
-    create_access_token, jwt_required, get_jwt_identity, get_raw_jwt
+    create_access_token, jwt_required, get_jwt_identity
 )
 
-from app import blacklist
-from database.applet_model import DeviceInfo
+from database.mindlogger_models import UserDevice, Activity, Applet
+from database.notification_models import NotificationSubscription
 from database.user_models import Participant
+from libs import sns
 
 user_api = Blueprint('user_api', __name__)
-
-
-def register_device():
-    pass
-
-
-def unregister_device():
-    pass
 
 
 @user_api.route('/authentication', methods=['GET'])
@@ -54,14 +47,9 @@ def authentication():
 
     device_id = request.headers.get('deviceId', '')
     timezone = int(request.headers.get('timezone', 0))
-    if device_id:
-        if DeviceInfo.objects.filter(user=participant).exists():
-            device = DeviceInfo.objects.get(user=participant)
-            device.device_id = device_id
-            device.timezone = timezone
-            device.save()
-        else:
-            DeviceInfo(user=participant, timezone=timezone, device_id=device_id).save()
+
+    if device_id and not UserDevice.objects.filter(user=participant).exists():
+        UserDevice(user=participant, timezone=timezone, device_id=device_id).save()
 
     expires = datetime.timedelta(days=365)
     token = create_access_token(user_id, expires_delta=expires)
@@ -91,13 +79,24 @@ def authentication():
 @user_api.route('/authentication', methods=['DELETE'])
 @jwt_required
 def logout():
+    patient_id = get_jwt_identity()
     try:
-        jti = get_raw_jwt()['jti']
-        blacklist.add(jti)
-        unregister_device()
+        user_device = UserDevice.objects.get(user__patient_id__exact=patient_id)
+        user_device.delete()
         return jsonify({'message': 'Log out successfully.'}), 200
     except:
-        return abort(400)
+        return abort(500)
+
+
+def subscribe_topic_if_not(applet: Applet, activity: Activity, participant: Participant):
+    if hasattr(participant, 'user_device') and participant.user_device.device_id:
+        topic = activity.notification_topic
+        subscription_set = NotificationSubscription.objects.filter(subscriber=participant.user_device, topic=topic)
+        if not subscription_set.exists():
+            subscription_arn = sns.subscribe_to_topic(topic.sns_topic_arn, participant.user_device.endpoint_arn)
+            if subscription_arn:
+                NotificationSubscription(subscriber=participant.user_device, topic=topic,
+                                         subscription_arn=subscription_arn).save()
 
 
 @user_api.route('/applets', methods=['GET'])
@@ -115,6 +114,8 @@ def get_own_applets():
                 content = activity.content
                 data = json.loads(content)
                 item['activities'][activity.URI] = data
+
+                subscribe_topic_if_not(applet, activity, participant)
 
                 for screen in activity.screens.all():
                     name = screen.URI

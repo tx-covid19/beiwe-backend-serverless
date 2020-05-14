@@ -8,3 +8,4 @@ class DatabaseConfig(AppConfig):
 
     def ready(self):
         from database import signals
+        from database import notification_signals

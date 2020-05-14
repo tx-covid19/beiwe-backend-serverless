@@ -7,9 +7,10 @@ from .study_models import *
 from .user_models import *
 from .profiling_models import *
 from .data_access_models import *
-from .applet_model import *
+from .mindlogger_models import *
 from .info_models import *
 from .gps_models import *
+from .notification_models import *
 
 
 def get_and_summarize(patient_id: str):

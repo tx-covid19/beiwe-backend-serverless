@@ -4,7 +4,7 @@ from flask_jwt_extended import (
 )
 import json
 
-from database.applet_model import Screen, Response
+from database.mindlogger_models import Screen, Response
 from database.user_models import Participant
 
 response_api = Blueprint('response_api', __name__)

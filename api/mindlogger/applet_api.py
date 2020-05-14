@@ -1,12 +1,14 @@
+import datetime
 import json
+import random
 
 from flask import Blueprint, jsonify, request, abort
-from flask_jwt_extended import (
-    jwt_required
-)
+from flask_jwt_extended import jwt_required
 
-from database.applet_model import Applet, Activity, Screen, Event, PushNotification
+from database.mindlogger_models import Applet, Activity, Screen, Event
+from database.notification_models import NotificationTopic, NotificationEvent
 from database.study_models import Study
+from libs import eventbridge
 
 applet_api = Blueprint('applet_api', __name__)
 
@@ -77,53 +79,168 @@ def assemble_outputs(events):
     }
 
 
-@applet_api.route('/<applet_id>/schedule', methods=['GET', 'PUT'])
+@applet_api.route('/<applet_id>/schedule', methods=['GET'])
 @jwt_required
-def handle_schedule(applet_id):
-    if request.method == 'GET':
-        try:
-            events = Event.objects.filter(applet__pk=applet_id)
-            return jsonify(assemble_outputs([json.loads(e.event) for e in list(events)])), 200
-        except:
-            return jsonify({}), 200
+def get_schedule(applet_id):
+    try:
+        events = Event.objects.filter(applet__pk=applet_id)
+        return jsonify(assemble_outputs([json.loads(e.event) for e in list(events)])), 200
+    except:
+        return jsonify({}), 200
 
-    elif request.method == 'PUT':
+
+def submit_schedule(cron_expr, applet, activity, event):
+    event_set = NotificationEvent.objects.filter(topic=activity.notification_topic)
+    event_set_exists = event_set.exists()
+    if event_set_exists:
+        db_event: NotificationEvent = event_set.get()
+        event_rule_name = db_event.eventbridge_name
+    else:
+        ts = datetime.datetime.now().timestamp()
+        event_rule_name = 'mindlogger-applet-{}-activity-{}-{}'.format(applet.pk, activity.pk, ts)
+
+    try:
+        topic = NotificationTopic.objects.get(applet=applet, activity=activity)
+    except:
+        return False
+
+    if eventbridge.create_or_update_event(event_rule_name, cron_expr,
+                                          'mindlogger-applet-{}-activity-{}'.format(applet.pk, activity.pk),
+                                          topic.sns_topic_arn,
+                                          json.dumps(
+                                              dict(head=event['data']['title'],
+                                                   content=event['data']['description'])
+                                          )):
+        if not event_set_exists:
+            NotificationEvent(topic=topic, eventbridge_name=event_rule_name, rules=cron_expr,
+                              head=event['data']['title'], content=event['data']['description']).save()
+        else:
+            event: NotificationEvent = event_set.get()
+            event.rules = cron_expr
+            event.save()
+
+    return True
+
+
+def random_date(start, end, format_str='%H:%M'):
+    """
+    Random date set between range of date
+    :params start: Start date range
+    :type start: str
+    :params end: End date range
+    :type end: str
+    :params format_str: Format date
+    :type format_str: str
+    """
+    start_date = datetime.datetime.strptime(start, format_str)
+    end_date = datetime.datetime.strptime(end, format_str)
+
+    time_between_dates = end_date - start_date
+    days_between_dates = time_between_dates.seconds
+    random_number_of_seconds = random.randrange(days_between_dates)
+    return start_date + datetime.timedelta(seconds=random_number_of_seconds)
+
+
+def set_push_notification(event, applet, activity):
+    if 'data' not in event or 'schedule' not in event:
+        return
+
+    start_time = event['data']['notifications'][0]['start']
+    end_time = event['data']['notifications'][0]['end']
+    if event['data']['notifications'][0]['random']:
+        scheduled_time = random_date(start_time, end_time).strftime('%H:%M')
+    else:
+        scheduled_time = start_time
+
+    hour, minute = scheduled_time.split(':')
+    hour = int(hour)
+    minute = int(minute)
+
+    if 'dayOfMonth' in event['schedule']:
+        """
+        Schedule once
+        """
+        if 'year' in event['schedule'] and 'month' in event['schedule'] and 'dayOfMonth' in event['schedule']:
+            try:
+                year = int(event['schedule']['year'][0])
+                month = int(event['schedule']['month'][0]) + 1
+                day = int(event['schedule']['dayOfMonth'][0])
+            except:
+                return
+
+            submit_schedule('{} {} {} {} {} {}'.format(minute, hour, day, month, '?', year), applet, activity, event)
+
+    else:
+        start_date = None
+        end_date = None
+        if 'start' in event['schedule'] and event['schedule']['start']:
+            start_date = datetime.datetime.fromtimestamp(float(event['schedule']['start']) / 1000)
+        if 'end' in event['schedule'] and event['schedule']['end']:
+            end_date = datetime.datetime.fromtimestamp(float(event['schedule']['end']) / 1000)
+
+        if start_date and end_date:
+            day_range = str(start_date.day) + '-' + str(end_date.day)
+            month_range = str(start_date.month) + '-' + str(end_date.month)
+            year_range = str(start_date.year) + '-' + str(end_date.year)
+
+            if 'dayOfWeek' in event['schedule']:
+                day_of_week = int(event['schedule']['dayOfWeek'][0])
+                submit_schedule(
+                    '{} {} {} {} {} {}'.format(minute, hour, day_range, month_range, day_of_week, year_range), applet,
+                    activity, event)
+            else:
+                submit_schedule(
+                    '{} {} {} {} {} {}'.format(minute, hour, day_range, month_range, '?', year_range), applet, activity,
+                    event)
+        else:
+            if 'dayOfWeek' in event['schedule']:
+                day_of_week = int(event['schedule']['dayOfWeek'][0])
+                submit_schedule(
+                    '{} {} {} {} {} {}'.format(minute, hour, '*', '*', day_of_week, '*'), applet, activity, event)
+            else:
+                submit_schedule(
+                    '{} {} {} {} {} {}'.format(minute, hour, '*', '*', '?', '*'), applet, activity, event)
+
+
+@applet_api.route('/<applet_id>/schedule', methods=['PUT'])
+@jwt_required
+def set_schedule(applet_id):
+    try:
         schedule = json.loads(request.form.get('schedule'))
         applet = Applet.objects.get(pk=applet_id)
-        Event.objects.filter(applet__pk=applet_id).delete()
-
-        if 'events' in schedule:
-            # insert and update events/notifications
-            for event in schedule['events']:
-                db_event = Event(applet=applet, event=json.dumps(event))
-                db_event.save()
-                if 'data' in event and 'useNotifications' in event['data'] and event['data']['useNotifications']:
-                    if 'notifications' in event['data'] and event['data']['notifications'][0]['start']:
-                        PushNotification.update_notification(applet, db_event, event, {
-                            'timezone': 0
-                        })
-                        # in case of daily/weekly event
-                        # exist_notification = None
-                        #
-                        # if 'id' in event:
-                        #     exist_notification = PushNotification.objects.filter(referenced_event__pk=event['id'])
-                        #
-                        # if exist_notification:
-                        #     PushNotificationModel().replaceNotification(
-                        #         applet['_id'],
-                        #         savedEvent,
-                        #         thisUser,
-                        #         exist_notification)
-                        # else:
-                        #     PushNotificationModel().replaceNotification(
-                        #         applet['_id'],
-                        #         savedEvent,
-                        #         thisUser)
-                event['id'] = db_event.pk
-                db_event.event = json.dumps(event)
-                db_event.save()
+    except:
         return {
             "applet": {
-                "schedule": schedule
+                "schedule": {}
             }
         }
+
+    # remove the existing events and readd again
+    Event.objects.filter(applet__pk=applet_id).delete()
+
+    if 'events' in schedule:
+        # insert and update events/notifications
+        for event in schedule['events']:
+            if 'data' not in event or 'URI' not in event['data']:
+                continue
+            URI = event['data']['URI']
+            try:
+                activity = Activity.objects.get(URI__exact=URI)
+            except:
+                continue
+
+            db_event = Event(applet=applet, activity=activity, event=json.dumps(event))
+            db_event.save()
+            event['id'] = db_event.pk
+            db_event.event = json.dumps(event)
+            db_event.save()
+
+            if 'data' in event and 'useNotifications' in event['data'] and event['data']['useNotifications']:
+                if 'notifications' in event['data'] and event['data']['notifications'][0]['start']:
+                    set_push_notification(event, applet, activity)
+
+    return {
+        "applet": {
+            "schedule": schedule
+        }
+    }

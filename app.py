@@ -11,7 +11,7 @@ from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
                  mobile_api, participant_administration, survey_api)
-from api.mindlogger import mlogger_user_api, applet_api, response_api, schedule_api, push_notification_api, file_api, \
+from api.mindlogger import mlogger_user_api, applet_api, response_api, schedule_api, file_api, \
     info_api, gps_api
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN, FLASK_SECRET_KEY
 from libs.admin_authentication import is_logged_in
@@ -24,6 +24,10 @@ def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static")
     CORS(app)
     set_secret_key(app)
+    app.config['JWT_SECRET_KEY'] = 'thisisascret'
+    app.config['JWT_HEADER_NAME'] = 'Girder-Token'
+    app.config['JWT_HEADER_TYPE'] = ''
+    jwt = JWTManager(app)
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
     app.jinja_loader = jinja2.ChoiceLoader(loader)
     app.wsgi_app = ProxyFix(app.wsgi_app)
@@ -32,17 +36,6 @@ def subdomain(directory):
 
 # Register pages here
 app = subdomain("frontend")
-
-# Init JWT
-app.config['JWT_SECRET_KEY'] = FLASK_SECRET_KEY
-app.config['JWT_HEADER_NAME'] = 'Girder-Token'
-app.config['JWT_HEADER_TYPE'] = ''
-app.config['JWT_BLACKLIST_ENABLED'] = True
-app.config['JWT_BLACKLIST_TOKEN_CHECKS'] = ['access', 'refresh']
-jwt = JWTManager(app)
-# if longer lifetime is needed, use db or redis instead
-blacklist = set()
-
 app.jinja_env.globals['current_year'] = datetime.now().strftime('%Y')
 app.register_blueprint(mobile_api.mobile_api)
 app.register_blueprint(admin_pages.admin_pages)
@@ -61,7 +54,6 @@ app.register_blueprint(mlogger_user_api.user_api, url_prefix='/api/v1/user')
 app.register_blueprint(applet_api.applet_api, url_prefix='/api/v1/applet')
 app.register_blueprint(response_api.response_api, url_prefix='/api/v1/response')
 app.register_blueprint(schedule_api.schedule_api, url_prefix='/api/v1/schedule')
-app.register_blueprint(push_notification_api.push_notification_api)
 app.register_blueprint(file_api.file_api, url_prefix='/api/v1/file')
 app.register_blueprint(info_api.info_api, url_prefix='/api/v1/info')
 app.register_blueprint(gps_api.gps_api, url_prefix='/api/v1')
@@ -71,10 +63,10 @@ if os.environ['DJANGO_DB_ENV'] != 'local':
     sentry = Sentry(app, dsn=SENTRY_ELASTIC_BEANSTALK_DSN)
 
 
-@jwt.token_in_blacklist_loader
-def check_if_token_in_blacklist(decrypted_token):
-    jti = decrypted_token['jti']
-    return jti in blacklist
+# @jwt.token_in_blacklist_loader
+# def check_if_token_in_blacklist(decrypted_token):
+#     jti = decrypted_token['jti']
+#     return jti in blacklist
 
 
 @app.route("/<page>.html")
