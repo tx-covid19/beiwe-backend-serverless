@@ -16,11 +16,16 @@ from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN,
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
 from pages import (admin_pages, data_access_web_form, mobile_pages, survey_designer,
-    system_admin_pages, digital_selfie_web_form)
+    system_admin_pages, digital_selfie_web_form, fitbit_web_form)
 
 from flask_cdn import CDN, url_for
 
 cdn = CDN()
+
+def envopts(local, prod):
+    if DOMAIN_NAME == 'localhost':
+        return local
+    return prod
 
 def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static", subdomain_matching=True)
@@ -65,11 +70,11 @@ app.register_blueprint(copy_study_api.copy_study_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(data_pipeline_api.data_pipeline_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(dashboard_api.dashboard_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(redcap_api.redcap_api, subdomain=BEIWE_SUBDOMAIN)
-app.register_blueprint(digital_selfie_web_form.digital_selfie_web_form, subdomain=DIGITAL_SELFIE_SUBDOMAIN)
-app.register_blueprint(fitbit_api.fitbit_api, subdomain=FITBIT_SUBDOMAIN)
+app.register_blueprint(digital_selfie_web_form.digital_selfie_web_form,  **envopts(local={'url_prefix': '/digital-selfie'}, prod={'subdomain': DIGITAL_SELFIE_SUBDOMAIN}))
+app.register_blueprint(fitbit_web_form.fitbit_web_form, **envopts(local={'url_prefix': '/fitbit'}, prod={'subdomain': FITBIT_SUBDOMAIN}))
 
 # Don't set up Sentry for local development
-if os.environ['DJANGO_DB_ENV'] != 'local':
+if os.environ['DJANGO_DB_ENV'] not in ['local', 'docker']:
     sentry = Sentry(app, dsn=SENTRY_ELASTIC_BEANSTALK_DSN)
 
 
