@@ -92,6 +92,7 @@ def logout():
 
 
 def subscribe_topic_if_not(applet: Applet, activity: Activity, participant: Participant):
+    # only when user login on mobile device, do the subscription check
     if hasattr(participant, 'user_device') and participant.user_device.device_id:
         topic = activity.notification_topic
         subscription_set = NotificationSubscription.objects.filter(subscriber=participant.user_device, topic=topic)
