@@ -12,6 +12,10 @@ from config.settings import FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET
 from database.fitbit_models import FitbitCredentials, FitbitRecord
 from database.user_models import Participant
 
+import libs.fitbit as fitbit
+
+from pipeline.boto_helpers import get_boto_client
+
 fitbit_api = Blueprint('fitbit_api', __name__)
 SCOPES = [
     'profile',
@@ -90,61 +94,16 @@ def fitbit_authorize():
             record.save()
         else:
             # new authorize
-            FitbitCredentials(access_token=access_token, refresh_token=refresh_token, user=participant).save()
+            record = FitbitCredentials(access_token=access_token, refresh_token=refresh_token, user=participant)
+            record.save()
     except:
         pass
-    return jsonify({'msg': 'Done.'}), 200
-
-
-def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_cb):
-    res = {}
-
-    client = fitbit.Fitbit(
-        FITBIT_CLIENT_ID,
-        FITBIT_CLIENT_SECRET,
-        access_token=access_token,
-        refresh_token=refresh_token,
-        refresh_cb=update_cb
-    )
+    
 
     try:
-        res['devices'] = client.get_devices()
-        # These two APIs are broken
-        # res['friends'] = client.get_friends()
-        # res['friends_leaderboard'] = client.get_friends_leaderboard('30d')
-        res['time_series'] = defaultdict(dict)
-
-        for k, type_str in TIME_SERIES_TYPES.items():
-            record = client.time_series(k, base_date=base_date, end_date=end_date)
-            data = record[k.replace('/', '-')]
-            for dp in data:
-                date = dp['dateTime']
-                res['time_series'][date][k.replace('/', '_')] = dp['value']
+        fitbit.create_fitbit_records_trigger(record)
     except:
-        # TODO log and retry
-        return {}
+        pass
 
-    return res
+    return jsonify({'msg': 'Done.'}), 200
 
-
-# TODO: add authentication in production
-@fitbit_api.route('/refresh')
-def refresh_fitbit():
-    for record in FitbitCredentials.objects.all():
-        def update_token(token_dict):
-            record.access_token = token_dict['access_token']
-            record.refresh_token = token_dict['refresh_token']
-            record.save()
-
-        user = record.user
-        access_token = record.access_token
-        refresh_token = record.refresh_token
-
-        # There is a max time range
-        res = get_fitbit_record(access_token, refresh_token, '2020-04-01', datetime.utcnow().strftime('%Y-%m-%d'),
-                                update_token)
-        if 'time_series' in res:
-            for time, data in res['time_series'].items():
-                FitbitRecord(user=user, last_updated=time, devices=res['devices'], **data).save()
-
-    return jsonify("updated"), 200

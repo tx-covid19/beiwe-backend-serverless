@@ -19,6 +19,20 @@ services:
       - ./.env.dev
     depends_on:
       - db
+  lab:
+    build: .
+    command:  >
+      bash -c "
+        jupyter lab --ip=0.0.0.0 --no-browser --allow-root
+      "
+    volumes:
+      - .:/code
+    ports:
+      - 8888:8888
+    env_file:
+      - ./.env.dev
+    depends_on:
+      - db
   db:
     image: postgres:12.0-alpine
     volumes:

@@ -20,6 +20,7 @@ ipython
 django-extensions
 djangorestframework==3.11.0
 Flask-JWT-Extended==3.24.1
+flask-cdn==1.5.3
 requests==2.23.0
 python-dateutil
 Werkzeug~=1.0.1
@@ -32,7 +33,7 @@ jinja2
 boxsdk
 
 # redcap
-PyCap~=0.0.0
+PyCap
 
 # cors
 flask-cors
