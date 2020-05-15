@@ -47,9 +47,12 @@ def authentication():
 
     device_id = request.headers.get('deviceId', '')
     timezone = int(request.headers.get('timezone', 0))
-
-    if device_id and not UserDevice.objects.filter(user=participant).exists():
-        UserDevice(user=participant, timezone=timezone, device_id=device_id).save()
+    if device_id:
+        if UserDevice.objects.filter(user=participant).exists():
+            if UserDevice.objects.get(user=participant).device_id != device_id:
+                return jsonify({'message': 'You have logged in another device.', 'type': 'access'}), 401
+        else:
+            UserDevice(user=participant, timezone=timezone, device_id=device_id).save()
 
     expires = datetime.timedelta(days=365)
     token = create_access_token(user_id, expires_delta=expires)
@@ -115,6 +118,8 @@ def get_own_applets():
                 data = json.loads(content)
                 item['activities'][activity.URI] = data
 
+                # check subscription list every time when refreshing the page
+                # in case that there may new applets added after user finishes registration.
                 subscribe_topic_if_not(applet, activity, participant)
 
                 for screen in activity.screens.all():
