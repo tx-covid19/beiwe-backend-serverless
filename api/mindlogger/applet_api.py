@@ -2,6 +2,7 @@ import datetime
 import json
 import random
 
+from django.db import transaction
 from flask import Blueprint, jsonify, request, abort
 from flask_jwt_extended import jwt_required
 
@@ -86,18 +87,14 @@ def get_schedule(applet_id):
         events = Event.objects.filter(applet__pk=applet_id)
         return jsonify(assemble_outputs([json.loads(e.event) for e in list(events)])), 200
     except:
-        return jsonify({}), 200
+        return jsonify(assemble_outputs([])), 200
 
 
 def submit_schedule(cron_expr, applet, activity, event):
-    event_set = NotificationEvent.objects.filter(topic=activity.notification_topic)
-    event_set_exists = event_set.exists()
-    if event_set_exists:
-        db_event: NotificationEvent = event_set.get()
-        event_rule_name = db_event.eventbridge_name
-    else:
-        ts = datetime.datetime.now().timestamp()
-        event_rule_name = 'mindlogger-applet-{}-activity-{}-{}'.format(applet.pk, activity.pk, ts)
+    # assert all old schedules have been cleaned up
+    # use timestamp to avoid duplicate names for multiple events towards the same topic
+    ts = datetime.datetime.now().timestamp()
+    event_rule_name = 'mindlogger-applet-{}-activity-{}-{}'.format(applet.pk, activity.pk, ts)
 
     try:
         topic = NotificationTopic.objects.get(applet=applet, activity=activity)
@@ -111,27 +108,13 @@ def submit_schedule(cron_expr, applet, activity, event):
                                               dict(head=event['data']['title'],
                                                    content=event['data']['description'])
                                           )):
-        if not event_set_exists:
-            NotificationEvent(topic=topic, eventbridge_name=event_rule_name, rules=cron_expr,
-                              head=event['data']['title'], content=event['data']['description']).save()
-        else:
-            event: NotificationEvent = event_set.get()
-            event.rules = cron_expr
-            event.save()
+        NotificationEvent(topic=topic, eventbridge_name=event_rule_name, rules=cron_expr,
+                          head=event['data']['title'], content=event['data']['description']).save()
 
     return True
 
 
 def random_date(start, end, format_str='%H:%M'):
-    """
-    Random date set between range of date
-    :params start: Start date range
-    :type start: str
-    :params end: End date range
-    :type end: str
-    :params format_str: Format date
-    :type format_str: str
-    """
     start_date = datetime.datetime.strptime(start, format_str)
     end_date = datetime.datetime.strptime(end, format_str)
 
@@ -179,6 +162,7 @@ def set_push_notification(event, applet, activity):
             end_date = datetime.datetime.fromtimestamp(float(event['schedule']['end']) / 1000)
 
         if start_date and end_date:
+            # TODO does not work for start_date.day > end_date.day, it leads to invalid cron exprs.
             day_range = str(start_date.day) + '-' + str(end_date.day)
             month_range = str(start_date.month) + '-' + str(end_date.month)
             year_range = str(start_date.year) + '-' + str(end_date.year)
@@ -215,9 +199,6 @@ def set_schedule(applet_id):
             }
         }
 
-    # remove the existing events and readd again
-    Event.objects.filter(applet__pk=applet_id).delete()
-
     if 'events' in schedule:
         # insert and update events/notifications
         for event in schedule['events']:
@@ -225,9 +206,15 @@ def set_schedule(applet_id):
                 continue
             URI = event['data']['URI']
             try:
-                activity = Activity.objects.get(URI__exact=URI)
+                activity = Activity.objects.get(URI__exact=URI, applet__pk=applet_id)
+                with transaction.atomic():
+                    # remove the existing events and readd again
+                    # must clean up all push notifications because there might be many multiple events to one topic
+                    # which makes modifying existing records very tricky
+                    Event.objects.filter(applet__pk=applet_id, activity=activity).delete()
+                    NotificationEvent.objects.filter(topic=activity.notification_topic).delete()
             except:
-                continue
+                return abort(400)
 
             db_event = Event(applet=applet, activity=activity, event=json.dumps(event))
             db_event.save()

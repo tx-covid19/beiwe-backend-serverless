@@ -15,6 +15,17 @@ def create_or_update_event(event_rule_name, cron_expr, target_id, target_arn, ms
             return False
 
         return True
-
     except:
-        raise
+        return False
+
+
+def delete_event(event_rule_name):
+    events_client = boto3.client('events')
+    try:
+        events_client.delete_rule(
+            Name=event_rule_name,
+            Force=True
+        )
+        return True
+    except:
+        return False
