@@ -2,7 +2,7 @@ import os
 import sys
 import base64
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import requests
 import traceback
 
@@ -11,10 +11,10 @@ from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
 
 # noinspection PyUnresolvedReferences
 from config import load_django
-from config.fitbit_constants import TIME_SERIES_TYPES
+from config.fitbit_constants import TIME_SERIES_TYPES, INTRA_TIME_SERIES_TYPES
 from config.settings import (FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET, FITBIT_REDIRECT_URL, IS_SERVERLESS)
 
-from database.fitbit_models import (FitbitRecord, FitbitCredentials)
+from database.fitbit_models import (FitbitRecord, FitbitIntradayRecord, FitbitCredentials)
 from database.user_models import Participant
 
 from pipeline.boto_helpers import get_boto_client
@@ -72,7 +72,7 @@ def create_fitbit_records_trigger(credential):
     )
 
 
-def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_cb):
+def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_cb, fetched_dates):
     res = {}
 
     client = fitbit.Fitbit(
@@ -83,11 +83,15 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
         refresh_cb=update_cb
     )
 
+    intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
+
     try:
-        res['devices'] = client.get_devices()
-        res['friends'] = client.get_friends()
-        res['friends_leaderboard'] = client.get_friends_leaderboard('30d')
+        # res['devices'] = client.get_devices()
+        # res['friends'] = client.get_friends()
+        # res['friends_leaderboard'] = client.get_friends_leaderboard()
+        
         res['time_series'] = defaultdict(dict)
+        res['intra_time_series'] = defaultdict(dict)
 
         for k, type_str in TIME_SERIES_TYPES.items():
             record = client.time_series(k, base_date=base_date, end_date=end_date)
@@ -95,7 +99,30 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
             for dp in data:
                 date = dp['dateTime']
                 res['time_series'][date][k.replace('/', '_')] = dp['value']
+
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        for k, type_str in INTRA_TIME_SERIES_TYPES.items():
+            delta = timedelta(days=1)
+            intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
+            while intra_date <= end_date:
+                intra_date_fmt = intra_date.strftime("%Y-%m-%d")
+                if intra_date_fmt in fetched_dates:
+                    continue
+
+                record = client.intraday_time_series(k, base_date=intra_date_fmt)
+
+                k_db = k.replace('/', '_')
+                k_api = k.replace('/', '-')
+                data = record[f"{k_api}-intraday"]
+                for metric in data['dataset']:
+                    metric_datetime = f"{intra_date} {metric['time']}"
+                    res['intra_time_series'][metric_datetime][k_db] = metric['value']
+                intra_date += delta
+
     except:
+        import traceback
+        traceback.print_exc()
+        
         return {}
 
     return res
@@ -105,6 +132,11 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
     credential_id = event['credential']
     credential = FitbitCredentials.objects.get(pk=credential_id)
+
+    fetched_dates = set([
+        d['last_updated'].strftime('%Y-%m-%d')
+        for d in FitbitIntradayRecord.objects.filter(user=1).values('last_updated').values('last_updated')
+    ])
 
     def update_token(token_dict):
         credential.access_token = token_dict['access_token']
@@ -118,13 +150,18 @@ def do_process_fitbit_records_lambda_handler(event, context):
     # There is a max time range
     res = get_fitbit_record(
         access_token, refresh_token,
-        '2020-04-01', datetime.utcnow().strftime('%Y-%m-%d'),
-        update_token
+        '2020-05-01', (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d'),
+        update_token,
+        fetched_dates
     )
 
     if 'time_series' in res:
         for time, data in res['time_series'].items():
             FitbitRecord(user=user, last_updated=time, devices=res['devices'], **data).save()
+
+    if 'intra_time_series' in res:
+        for time, data in res['intra_time_series'].items():
+            FitbitIntradayRecord(user=user, last_updated=time, **data).save()
 
     return {
         'statusCode': 200,
@@ -184,8 +221,6 @@ def authorize(code, state):
         resp = r.json()
         access_token = resp['access_token']
         refresh_token = resp['refresh_token']
-
-        print(access_token)
 
         records = FitbitCredentials.objects.filter(user__patient_id__exact=patient_id)
         if records.exists():

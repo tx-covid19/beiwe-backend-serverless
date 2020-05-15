@@ -9,17 +9,13 @@ from django.utils import timezone
 from flask import (Blueprint, abort, json, jsonify, redirect, render_template,
                    request)
 from flask_cors import cross_origin
-from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequestKeyError
 from werkzeug.utils import secure_filename
 
 from config.constants import (ALLOWED_SELFIE_EXTENSIONS,
                               DEVICE_IDENTIFIERS_HEADER)
-from config.settings import (FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET,
-                             FITBIT_REDIRECT_URL)
 from database.data_access_models import FileToProcess
-from database.fitbit_models import FitbitRecord
 from database.profiling_models import DecryptionKeyError, UploadTracking
 from database.study_models import ParticipantSurvey, Study
 from database.user_models import Participant, Researcher, StudyRelation
@@ -30,9 +26,6 @@ from libs.logging import log_error
 from libs.s3 import (get_client_private_key, get_client_public_key_string,
                      s3_upload)
 from libs.sentry import make_sentry_client
-from libs.user_authentication import (authenticate_user,
-                                      authenticate_user_registration,
-                                      minimal_validation)
 
 ################################################################################
 ############################# GLOBALS... #######################################
