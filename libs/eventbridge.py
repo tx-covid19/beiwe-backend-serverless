@@ -27,7 +27,7 @@ def delete_event(event_rule_name, target_id):
             Ids=[
                 target_id,
             ],
-            Force=True | False
+            Force=True
         )
         events_client.delete_rule(
             Name=event_rule_name,
