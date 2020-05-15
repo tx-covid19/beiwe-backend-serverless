@@ -59,7 +59,7 @@ def unregister_activity_as_topic(sender, **kwargs):
 @receiver(pre_delete, sender=NotificationEvent)
 def remove_eventbridge_when_unavailable(sender, **kwargs):
     event: NotificationEvent = kwargs['instance']
-    eventbridge.delete_event(event.eventbridge_name)
+    eventbridge.delete_event(event.eventbridge_name, event.target_id)
 
 
 @receiver(pre_delete, sender=NotificationSubscription)

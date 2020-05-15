@@ -112,15 +112,16 @@ def submit_schedule(cron_expr, applet, activity, event):
     except:
         return False
 
+    target_id = 'mindlogger-applet-{}-activity-{}'.format(applet.pk, activity.pk)
     if eventbridge.create_or_update_event(event_rule_name, cron_expr,
-                                          'mindlogger-applet-{}-activity-{}'.format(applet.pk, activity.pk),
+                                          target_id,
                                           topic.sns_topic_arn,
                                           json.dumps(
                                               dict(head=event['data']['title'],
                                                    content=event['data']['description'])
                                           )):
         NotificationEvent(topic=topic, eventbridge_name=event_rule_name, rules=cron_expr,
-                          head=event['data']['title'], content=event['data']['description']).save()
+                          head=event['data']['title'], content=event['data']['description'], target_id=target_id).save()
 
     return True
 
@@ -203,6 +204,14 @@ def set_schedule(applet_id):
     try:
         schedule = json.loads(request.form.get('schedule'))
         applet = Applet.objects.get(pk=applet_id)
+
+        with transaction.atomic():
+            # remove the existing events and readd again
+            # must clean up all push notifications because there might be many multiple events to one topic
+            # which makes modifying existing records very tricky
+            Event.objects.filter(applet__pk=applet_id).delete()
+            for activity in applet.activities.all():
+                NotificationEvent.objects.filter(topic__activity=activity).delete()
     except:
         return {
             "applet": {
@@ -218,12 +227,6 @@ def set_schedule(applet_id):
             URI = event['data']['URI']
             try:
                 activity = Activity.objects.get(URI__exact=URI, applet__pk=applet_id)
-                with transaction.atomic():
-                    # remove the existing events and readd again
-                    # must clean up all push notifications because there might be many multiple events to one topic
-                    # which makes modifying existing records very tricky
-                    Event.objects.filter(applet__pk=applet_id, activity=activity).delete()
-                    NotificationEvent.objects.filter(topic=activity.notification_topic).delete()
             except:
                 return abort(400)
 
