@@ -21,7 +21,8 @@ def replace_id(db_obj, prefix: str):
     db_obj.save()
 
 
-@applet_api.route('/<study_id>', methods=['POST'])
+# TODO need privilege
+@applet_api.route('/study/<study_id>', methods=['POST'])
 def create_applet(study_id):
     if not request.is_json:
         return abort(400)
@@ -78,6 +79,16 @@ def assemble_outputs(events):
         "around": 1585724400000,
         'events': events
     }
+
+
+# TODO need privilege
+@applet_api.route('/<applet_id>', methods=['DELETE'])
+def delete_applet(applet_id):
+    try:
+        Applet.objects.get(pk=applet_id).delete()
+        return jsonify({'message': 'Done.'}), 200
+    except:
+        return abort(500)
 
 
 @applet_api.route('/<applet_id>/schedule', methods=['GET'])

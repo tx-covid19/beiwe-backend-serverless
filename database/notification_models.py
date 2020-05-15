@@ -12,7 +12,7 @@ class NotificationTopic(models.Model):
 
 class NotificationEvent(models.Model):
     last_updated = models.DateTimeField(auto_now=True)
-    topic = models.ForeignKey(NotificationTopic)
+    topic = models.ForeignKey(NotificationTopic, on_delete=models.CASCADE)
     eventbridge_name = models.TextField()
     rules = models.TextField()
     head = models.TextField()

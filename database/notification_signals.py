@@ -21,9 +21,7 @@ def register_user_in_sns(sender, **kwargs):
 def unregister_user_in_sns(sender, **kwargs):
     user_device: UserDevice = kwargs['instance']
     if user_device.endpoint_arn:
-        for sub in NotificationSubscription.objects.filter(subscriber=user_device).all():
-            sns.unsubscribe_topic(sub.subscription_arn)
-
+        NotificationSubscription.objects.filter(subscriber=user_device).delete()
         sns.delete_user_endpoint(user_device.endpoint_arn)
 
 
@@ -62,3 +60,9 @@ def unregister_activity_as_topic(sender, **kwargs):
 def remove_eventbridge_when_unavailable(sender, **kwargs):
     event: NotificationEvent = kwargs['instance']
     eventbridge.delete_event(event.eventbridge_name)
+
+
+@receiver(pre_delete, sender=NotificationSubscription)
+def unsubscribe_when_removed(sender, **kwargs):
+    subscription: NotificationSubscription = kwargs['instance']
+    sns.unsubscribe_topic(subscription.subscription_arn)
