@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify, request
+from django.db import transaction
+from flask import Blueprint, jsonify, request, abort
 from flask_jwt_extended import (
     jwt_required, get_jwt_identity
 )
@@ -22,12 +23,21 @@ def add_response(applet_id, activity_id):
     patient_id = get_jwt_identity()
     try:
         user = Participant.objects.get(patient_id__exact=patient_id)
+    except:
+        return abort(401)
+
+    try:
         meta_data = request.form.get('metadata')
         data = json.loads(meta_data)
         resp: dict = data['responses']
-        for key, value in resp.items():
-            screen = Screen.objects.get(URI__exact=key)
-            Response(user=user, screen=screen, value=json.dumps(value)).save()
+    except:
+        return abort(400)
+
+    try:
+        with transaction.atomic():
+            for key, value in resp.items():
+                screen = Screen.objects.get(URI__exact=key, activity__pk=activity_id)
+                Response(user=user, screen=screen, value=json.dumps(value)).save()
         return jsonify({}), 200
     except:
-        raise
+        return abort(400)
