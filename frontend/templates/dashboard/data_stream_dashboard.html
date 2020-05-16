@@ -3,13 +3,13 @@
 
 {% block head %}
   {{ super() }}
-  <link rel="stylesheet" href="/static/css/dashboard_pages.css"  type="text/css"/>
-  <link rel="stylesheet" href="/static/css/libraries/bootstrap-datetimepicker.css"  type="text/css"/>
-  <script type="text/javascript" src="/static/javascript/libraries/moment.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/transition.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/collapse.js"></script>
-  <script type="text/javascript" src="/static/javascript/libraries/bootstrap-datetimepicker.js"></script>
-  <script src="/static/javascript/dashboard_features.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard_pages.css') }}"  type="text/css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/libraries/bootstrap-datetimepicker.css') }}"  type="text/css"/>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/moment.min.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/transition.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/collapse.js') }}"></script>
+	<script type="text/javascript" src="{{ url_for('static', filename='javascript/libraries/bootstrap-datetimepicker-4.17.47.js') }}"></script>
+	<script src="{{ url_for('static', filename='javascript/dashboard_features.js') }}"></script>
   <script type="text/javascript">
     window.color_high_range = null;
     window.color_low_range = null;
@@ -51,6 +51,32 @@
         </div>
       </div>
     </h1>
+  </div>
+
+  <div class='summary_table'>
+     <h1 class="h4"> Summary Table </h1>
+      <table class="table table-bordered" id="dashboard-datastream-summary-table">
+        <thead>
+          <tr>
+            <th> Participant ID </th>
+            <th> Total </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for patient_id, value in byte_streams_summary.items() %} {# iterate over keys #}
+            <tr>
+              <th>
+                <a href="/dashboard/{{ study_id }}/patient/{{ patient_id }}">
+                  {{ patient_id }}
+                </a>
+              </th>
+              <td class="bytes" ng-style="calculateColor({{ value }})" data-number="{{ value }}">
+                {{ "{:,}".format(value) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+    </table>
   </div>
 
 {#  ----------- ADDING DROP DOWN FILTER BAR HERE ---------------------- #}
@@ -220,25 +246,25 @@
         <thead>
           <tr>
             <th> Participant ID </th>
-            {% for time in range(times|length) %}
-                <th>{{ times[time].strftime('%m/%d/%Y') }}</th>
+            {% for time_bin in times %}
+                <th>{{ time_bin.strftime('%m/%d/%Y') }}</th>
             {% endfor %}
           </tr>
         </thead>
         <tbody>
-          {% for patient_id, byte_list in byte_streams.items() %} {# iterate over keys #}
+          {% for patient_id, byte_dict in byte_streams.items() %} {# iterate over keys #}
             <tr>
               <th>
                 <a href="/dashboard/{{ study_id }}/patient/{{ patient_id }}">
                   {{ patient_id }}
                 </a>
               </th>
-              {% for bytes in byte_list %} {# iterate over bytes in values #}
-                {% if bytes == None %}
+              {% for time_bin in times %} {# iterate over bytes in values #}
+	        {% if time_bin not in byte_dict %}
                   <td class="bytes" ng-style="calculateColor({{ 0 }})" data-number="0" >0</td>
                 {% else %}
-                  <td class="bytes" ng-style="calculateColor({{ bytes }})" data-number="{{ bytes }}">
-                    {{ "{:,}".format(bytes) }}
+                  <td class="bytes" ng-style="calculateColor({{ byte_dict[time_bin] }})" data-number="{{ byte_dict[time_bin] }}">
+                    {{ "{:,}".format(byte_dict[time_bin]) }}
                   </td>
                 {% endif %}
               {% endfor %}

@@ -67,10 +67,10 @@ def create_new_participant():
     # Create an empty file on S3 indicating that this user exists
     study_object_id = Study.objects.filter(pk=study_id).values_list('object_id', flat=True).get()
     s3_upload(patient_id, b"", study_object_id)
-
-    # if we are running in serverless mode a lambda function will be triggered
-    # by the empty file written in the previous line, which will generate
-    # the keys
+    #
+    # # if we are running in serverless mode a lambda function will be triggered
+    # # by the empty file written in the previous line, which will generate
+    # # the keys
     if IS_SERVERLESS is False:
         create_client_key_pair(patient_id, study_object_id)
 

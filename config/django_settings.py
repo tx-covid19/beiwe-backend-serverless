@@ -21,13 +21,27 @@ if 'test' in sys.argv:
             'CONN_MAX_AGE': None,
         }
     }
+elif os.environ['DJANGO_DB_ENV'] == "docker":
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': os.environ.get('POSTGRES_DB', ''),
+            'USER': os.environ.get('POSTGRES_USER', ''),
+            'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
+            'HOST': os.environ.get('POSTGRES_HOST', ''),
+            'PORT': os.environ.get('POSTGRES_PORT', ''),
+        }
+    }
 elif os.environ['DJANGO_DB_ENV'] == "local":
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': DB_PATH,
-            'CONN_MAX_AGE': None,
-        },
+            'ENGINE': 'django.db.backends.postgresql_psycopg2',
+            'NAME': 'covid',
+            'USER': 'postgres',
+            'PASSWORD': 'puzhao',
+            'HOST': 'localhost',
+            'PORT': '',
+        }
     }
 elif os.environ['DJANGO_DB_ENV'] == "remote":
     DATABASES = {
@@ -52,6 +66,7 @@ USE_TZ = True
 INSTALLED_APPS = [
     'database.apps.DatabaseConfig',
     'django_extensions',
+    'rest_framework'
 ]
 
 SHELL_PLUS = "ipython"
@@ -64,7 +79,7 @@ SHELL_PLUS_POST_IMPORTS = [
     ["collections", ("Counter", "defaultdict")],
     ["django.utils.timezone", ("localtime", "make_aware", "make_naive")],
     ["time", ("sleep",)],
-    ["database.models", ("watch_uploads", "watch_files_to_process", "get_and_summarize")]
+    ["libs.shell_utils", "*"]
 ]
 
 # Using the default test runner

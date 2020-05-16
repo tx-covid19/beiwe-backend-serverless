@@ -33,23 +33,24 @@ from deployment_helpers.aws.iam import iam_purge_instance_profiles
 from deployment_helpers.aws.rds import create_new_rds_instance
 from deployment_helpers.configuration_utils import (are_aws_credentials_present,
     create_finalized_configuration, create_processing_server_configuration_file,
-    create_rabbit_mq_password, get_rabbit_mq_password, is_global_configuration_valid,
+    create_rabbit_mq_password_file, get_rabbit_mq_password, is_global_configuration_valid,
     reference_data_processing_server_configuration, reference_environment_configuration_file,
     validate_beiwe_environment_config)
 from deployment_helpers.constants import (APT_MANAGER_INSTALLS, APT_SINGLE_SERVER_AMI_INSTALLS,
-    APT_WORKER_INSTALLS, DEPLOYMENT_ENVIRON_SETTING_REMOTE_FILE_PATH, DO_CREATE_ENVIRONMENT,
-    DO_SETUP_EB_UPDATE_OPEN, ENVIRONMENT_NAME_RESTRICTIONS, EXTANT_ENVIRONMENT_PROMPT,
-    FILES_TO_PUSH, get_beiwe_python_environment_variables_file_path,
-    get_finalized_environment_variables, get_global_config,
-    get_pushed_full_processing_server_env_file_path, get_server_configuration_file,
-    get_server_configuration_file_path, HELP_SETUP_NEW_ENVIRONMENT, LOCAL_AMI_ENV_CONFIG_FILE_PATH,
-    LOCAL_APACHE_CONFIG_FILE_PATH, LOCAL_CRONJOB_MANAGER_FILE_PATH,
+    APT_WORKER_INSTALLS, DEPLOYMENT_ENVIRON_SETTING_REMOTE_FILE_PATH,
+    DEPLOYMENT_SPECIFIC_CONFIG_FOLDER, DO_CREATE_ENVIRONMENT, DO_SETUP_EB_UPDATE_OPEN,
+    ENVIRONMENT_NAME_RESTRICTIONS, EXTANT_ENVIRONMENT_PROMPT, FILES_TO_PUSH,
+    get_beiwe_python_environment_variables_file_path, get_finalized_environment_variables,
+    get_global_config, get_pushed_full_processing_server_env_file_path,
+    get_server_configuration_file, get_server_configuration_file_path, HELP_SETUP_NEW_ENVIRONMENT,
+    LOCAL_AMI_ENV_CONFIG_FILE_PATH, LOCAL_APACHE_CONFIG_FILE_PATH, LOCAL_CRONJOB_MANAGER_FILE_PATH,
     LOCAL_CRONJOB_SINGLE_SERVER_AMI_FILE_PATH, LOCAL_CRONJOB_WORKER_FILE_PATH,
-    LOCAL_INSTALL_CELERY_WORKER, LOCAL_RABBIT_MQ_CONFIG_FILE_PATH, LOG_FILE, PURGE_COMMAND_BLURB,
-    PUSHED_FILES_FOLDER, RABBIT_MQ_PORT, REMOTE_APACHE_CONFIG_FILE_PATH, REMOTE_CRONJOB_FILE_PATH,
-    REMOTE_HOME_DIR, REMOTE_INSTALL_CELERY_WORKER, REMOTE_RABBIT_MQ_CONFIG_FILE_PATH,
-    REMOTE_RABBIT_MQ_FINAL_CONFIG_FILE_PATH, REMOTE_USERNAME, STAGED_FILES,
-    USER_SPECIFIC_CONFIG_FOLDER)
+    LOCAL_INSTALL_CELERY_WORKER, LOCAL_RABBIT_MQ_CONFIG_FILE_PATH, LOG_FILE,
+    MANAGER_SERVER_INSTANCE_TYPE, PURGE_COMMAND_BLURB, PUSHED_FILES_FOLDER, RABBIT_MQ_PORT,
+    REMOTE_APACHE_CONFIG_FILE_PATH, REMOTE_CRONJOB_FILE_PATH, REMOTE_HOME_DIR,
+    REMOTE_INSTALL_CELERY_WORKER, REMOTE_RABBIT_MQ_CONFIG_FILE_PATH,
+    REMOTE_RABBIT_MQ_FINAL_CONFIG_FILE_PATH, REMOTE_RABBIT_MQ_PASSWORD_FILE_PATH, REMOTE_USERNAME,
+    STAGED_FILES, WORKER_SERVER_INSTANCE_TYPE)
 from deployment_helpers.general_utils import current_time_string, do_zip_reduction, EXIT, log, retry
 
 
@@ -57,6 +58,10 @@ from deployment_helpers.general_utils import current_time_string, do_zip_reducti
 class FabricExecutionError(Exception): pass
 fabric_env.abort_exception = FabricExecutionError
 fabric_env.abort_on_prompts = True
+
+parser = argparse.ArgumentParser(description="interactive set of commands for deploying a Beiwe Cluster")
+DEV_MODE = False
+PROD_MODE = False
 
 ####################################################################################################
 ################################### Fabric Operations ##############################################
@@ -86,18 +91,14 @@ def remove_unneeded_ssh_keys():
 
 def push_manager_private_ip_and_password(eb_environment_name):
     ip = get_manager_private_ip(eb_environment_name) + ":" + str(RABBIT_MQ_PORT)
-    password = get_rabbit_mq_password()
-    filename = path_join(REMOTE_HOME_DIR, "manager_ip")
+    password = get_rabbit_mq_password(eb_environment_name)
+
     # echo puts a new line at the end of the output
-    run("echo {text} > {filename}".format(text=ip, filename=filename))
-    run("printf {text} >> {filename}".format(text=password, filename=filename))
-    # command = "printf {text} > {filename}".format(
-    #         text=ip + "\n" + password,
-    #         filename=path_join(REMOTE_HOME_DIR, "manager_ip"))
-    # run(command)
+    run(f"echo {ip} > {REMOTE_RABBIT_MQ_PASSWORD_FILE_PATH}")
+    run(f"printf {password} >> {REMOTE_RABBIT_MQ_PASSWORD_FILE_PATH}")
     
     
-def push_files():
+def push_home_directory_files():
     for local_relative_file, remote_relative_file in FILES_TO_PUSH:
         local_file = path_join(PUSHED_FILES_FOLDER, local_relative_file)
         remote_file = path_join(REMOTE_HOME_DIR, remote_relative_file)
@@ -114,8 +115,13 @@ def load_git_repo():
     
     # Make sure the code is on the right branch
     # git checkout prints to both stderr *and* stdout, so redirect them both to the log file
-    run('cd {home}/beiwe-backend; git checkout master 1>> {log} 2>> {log}'
-        .format(home=REMOTE_HOME_DIR, log=LOG_FILE))
+
+    if DEV_MODE:
+        run('cd {home}/beiwe-backend; git checkout development 1>> {log} 2>> {log}'
+            .format(home=REMOTE_HOME_DIR, log=LOG_FILE))
+    else:
+        run('cd {home}/beiwe-backend; git checkout master 1>> {log} 2>> {log}'
+            .format(home=REMOTE_HOME_DIR, log=LOG_FILE))
 
 
 def setup_python():
@@ -144,17 +150,18 @@ def setup_manager_cron():
     run('crontab -u {user} {file}'.format(file=REMOTE_CRONJOB_FILE_PATH, user=REMOTE_USERNAME))
 
 
-def setup_rabbitmq():
+def setup_rabbitmq(eb_environment_name):
+    create_rabbit_mq_password_file(eb_environment_name)
+
     # push the configuration file so that it listens on the configured port
     put(LOCAL_RABBIT_MQ_CONFIG_FILE_PATH, REMOTE_RABBIT_MQ_CONFIG_FILE_PATH)
-    sudo("cp {source} {dest}".format(
-            source=REMOTE_RABBIT_MQ_CONFIG_FILE_PATH, dest=REMOTE_RABBIT_MQ_FINAL_CONFIG_FILE_PATH
-    ))
+    sudo(f"cp {REMOTE_RABBIT_MQ_CONFIG_FILE_PATH} {REMOTE_RABBIT_MQ_FINAL_CONFIG_FILE_PATH}")
     
     # setup a new password
-    create_rabbit_mq_password()
-    sudo("rabbitmqctl add_user beiwe {password}".format(password=get_rabbit_mq_password()))
+    sudo(f"rabbitmqctl add_user beiwe {get_rabbit_mq_password(eb_environment_name)}")
     sudo('rabbitmqctl set_permissions -p / beiwe ".*" ".*" ".*"')
+    log.warning("This next command can take quite a while to run.")
+    # I tried backgrounding it, doing so breaks celery.  o_O
     sudo("service rabbitmq-server restart")
     
 
@@ -164,7 +171,7 @@ def setup_single_server_ami_cron():
 
 
 def apt_installs(manager=False, single_server_ami=False):
-    
+
     if manager:
         apt_install_list = APT_MANAGER_INSTALLS
     elif single_server_ami:
@@ -176,7 +183,6 @@ def apt_installs(manager=False, single_server_ami=False):
     # Sometimes (usually on slower servers) the remote server isn't done with initial setup when
     # we get to this step, so it has a bunch of retry logic.
     installs_failed = True
-
     for i in range(10):
         try:
             sudo('apt-get -y update >> {log}'.format(log=LOG_FILE))
@@ -222,13 +228,14 @@ def configure_local_postgres():
 def create_swap():
     """
     Allows the use of tiny T series servers and in general is nice to have.
-    fallocate -l 5G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && swapon -s
+    fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && swapon -s
     """
-    sudo("fallocate -l 5G /swapfile")
+    sudo("fallocate -l 4G /swapfile")
     sudo("chmod 600 /swapfile")
     sudo("mkswap /swapfile")
     sudo("swapon /swapfile")
     sudo("swapon -s")
+
 ####################################################################################################
 #################################### CLI Utility ###################################################
 ####################################################################################################
@@ -279,6 +286,7 @@ def prompt_for_extant_eb_environment_name():
 ##################################### AWS Operations ###############################################
 ####################################################################################################
 
+
 def do_setup_eb_update():
     print("\n", DO_SETUP_EB_UPDATE_OPEN)
     
@@ -296,6 +304,7 @@ def do_setup_eb_update():
         index = int(input("$ "))
     except Exception:
         log.error("Could not parse input.")
+        index = None  # ide warnings
         EXIT(1)
     
     if index < 1 or index > len(files):
@@ -334,7 +343,7 @@ def do_help_setup_new_environment():
 
     beiwe_environment_fp = get_beiwe_python_environment_variables_file_path(name)
     processing_server_settings_fp = get_server_configuration_file_path(name)
-    extant_files = os.listdir(USER_SPECIFIC_CONFIG_FOLDER)
+    extant_files = os.listdir(DEPLOYMENT_SPECIFIC_CONFIG_FOLDER)
     
     for fp in (beiwe_environment_fp, processing_server_settings_fp):
         if os.path.basename(fp) in extant_files:
@@ -368,20 +377,22 @@ def do_create_manager():
     except Exception as e:
         log.error("could not read settings file")
         log.error(e)
+        settings = None  # ide warnings...
         EXIT(1)
         
     log.info("creating manager server for %s..." % name)
     try:
-        instance = create_processing_control_server(name, settings["MANAGER_SERVER_INSTANCE_TYPE"])
+        instance = create_processing_control_server(name, settings[MANAGER_SERVER_INSTANCE_TYPE])
     except Exception as e:
         log.error(e)
+        instance = None  # ide warnings...
         EXIT(1)
     public_ip = instance['NetworkInterfaces'][0]['PrivateIpAddresses'][0]['Association']['PublicIp']
     
     configure_fabric(name, public_ip)
-    push_files()
+    push_home_directory_files()
     apt_installs(manager=True)
-    setup_rabbitmq()
+    setup_rabbitmq(name)
     load_git_repo()
     setup_python()
     push_beiwe_configuration(name)
@@ -408,19 +419,21 @@ def do_create_worker():
     except Exception as e:
         log.error("could not read settings file")
         log.error(e)
+        settings = None  # ide warnings...
         EXIT(1)
     
     log.info("creating worker server for %s..." % name)
     try:
-        instance = create_processing_server(name, settings["MANAGER_SERVER_INSTANCE_TYPE"])
+        instance = create_processing_server(name, settings[WORKER_SERVER_INSTANCE_TYPE])
     except Exception as e:
         log.error(e)
+        instance = None  # ide warnings...
         EXIT(1)
     instance_ip = instance['NetworkInterfaces'][0]['PrivateIpAddresses'][0]['Association']['PublicIp']
     # TODO: fabric up the worker with the celery/supervisord and ensure it can connect to manager.
     
     configure_fabric(name, instance_ip)
-    push_files()
+    push_home_directory_files()
     apt_installs()
     load_git_repo()
     setup_python()
@@ -438,7 +451,7 @@ def do_create_single_server_ami(ip_address, key_filename):
     :param key_filename: Full filepath of the key that lets you SSH into that server
     """
     configure_fabric(None, ip_address, key_filename=key_filename)
-    push_files()
+    push_home_directory_files()
     apt_installs(single_server_ami=True)
     load_git_repo()
     setup_python()
@@ -469,42 +482,48 @@ def do_fix_health_checks():
 
 
 def cli_args_validation():
-    # Warning: any change to format here requires you re-check all parameter validation
-    parser = argparse.ArgumentParser(
-             description="interactive set of commands for deploying a Beiwe Cluster")
     # Use '"count"' as the type, don't try and be fancy, argparse is a pain.
     parser.add_argument(
-            '-create-environment',
-            action="count",
-            help="creates new environment with the provided environment name",
+        '-create-environment',
+        action="count",
+        help="creates new environment with the provided environment name",
     )
     parser.add_argument(
-            '-create-manager',
-            action="count",
-            help="creates a data processing manager for the provided environment",
+        '-create-manager',
+        action="count",
+        help="creates a data processing manager for the provided environment",
     )
     parser.add_argument(
-            '-create-worker',
-            action="count",
-            help="creates a data processing worker for the provided environment",
+        '-create-worker',
+        action="count",
+        help="creates a data processing worker for the provided environment",
     )
     parser.add_argument(
-            "-help-setup-new-environment",
-            action="count",
-            help= "assists in creation of configuration files for a beiwe environment deployment",
+        "-help-setup-new-environment",
+        action="count",
+        help="assists in creation of configuration files for a beiwe environment deployment",
     )
     parser.add_argument(
-            "-fix-health-checks-blocking-deployment",
-            action="count",
-            help="sometimes deployment operations fail stating that health checks do not have sufficient permissions, run this command to fix that.",
+        "-fix-health-checks-blocking-deployment",
+        action="count",
+        help="sometimes deployment operations fail stating that health checks do not have sufficient permissions, run this command to fix that.",
     )
     parser.add_argument(
-            "-purge-instance-profiles",
-            action="count",
-            help=PURGE_COMMAND_BLURB,
+        "-dev",
+        action="count",
+        help="Worker and Manager deploy operations will swap the server over to the development branch instead of master.",
     )
-    
-    
+    parser.add_argument(
+        "-prod",
+        action="count",
+        help="Worker and Manager deploy operations will swap the server over to the production branch instead of master.",
+    )
+    parser.add_argument(
+        "-purge-instance-profiles",
+        action="count",
+        help=PURGE_COMMAND_BLURB,
+    )
+
     # Note: this arguments variable is not iterable.
     # access entities as arguments.long_name_of_argument, like arguments.update_manager
     arguments = parser.parse_args()
@@ -528,8 +547,18 @@ if __name__ == "__main__":
     
     # get CLI arguments, see function for details
     arguments = cli_args_validation()
-    # pprint (vars(arguments))
-    
+
+    if arguments.prod:
+        log.info("RUNNING IN PROD MODE")
+        PROD_MODE = True
+
+    if arguments.dev:
+        if PROD_MODE:
+            log.error("You cannot provide -prod and -dev at the same time.")
+            EXIT(1)
+        DEV_MODE = True
+        log.info("RUNNING IN DEV MODE")
+
     if arguments.help_setup_new_environment:
         do_help_setup_new_environment()
         EXIT(0)
@@ -554,3 +583,7 @@ if __name__ == "__main__":
         print(PURGE_COMMAND_BLURB, "\n\n\n")
         iam_purge_instance_profiles()
         EXIT(0)
+
+    # print help if nothing else did (make just supplying -dev print the help screen)
+    parser.print_help()
+    EXIT(0)

@@ -28,10 +28,12 @@ def validate_post_ignore_password(is_ios):
     if ("patient_id" not in request.values
         or "password" not in request.values
         or "device_id" not in request.values):
+        print(f"request did not contain all needed values {request.values}")
         return False
 
     participant_set = Participant.objects.filter(patient_id=request.values['patient_id'])
     if not participant_set.exists():
+        print(f"participant {request.values['patient_id']} does not exist")
         return False
     participant = participant_set.get()
     # Disabled

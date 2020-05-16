@@ -1,5 +1,5 @@
 <script>navBarStudies = {{ allowed_studies|safe }}</script>
-<script src="/static/javascript/app/survey-builder/controllers/nav-bar-study-controller.js"></script>
+	<script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/nav-bar-study-controller.js') }}"></script>
 <nav class="navbar navbar-default">
     <div class="container-fluid">
 
@@ -71,6 +71,8 @@
                         Download Data <span class="caret"></span>
                     </a>
                     <ul class="dropdown-menu">
+                        <li><a href="/job-queue">View Job Queue</a></li>
+                        <li><a href="/copy_data_to_box_form">Copy Data to Box</a></li>
                         <li><a href="/data_access_web_form">Download Raw/Chunked Data</a></li>
                         <li><a href="/pipeline_access_web_form">Download Processed (Pipeline Output) Data</a></li>
                     </ul>

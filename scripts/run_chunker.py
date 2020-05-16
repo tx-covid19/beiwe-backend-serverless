@@ -2,12 +2,16 @@ from config.constants import VOICE_RECORDING
 import config.load_django
 from database.user_models import Participant
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
+from database.study_models import Study, Survey, SurveyEvents
 import os
 from libs.file_processing import process_file_chunks_lambda, do_process_user_file_chunks_lambda_handler
 from libs.file_processing_utils import reindex_all_files_to_process
+from libs.survey_processing import process_survey_timings_file
+from libs.logfile_processing import process_app_log_file
+
 import argparse
 import config.remote_db_env
-from libs.s3 import s3_retrieve, check_for_client_key_pair
+from libs.s3 import s3_retrieve, check_for_client_key_pair, s3_list_files
 from multiprocessing.pool import ThreadPool
 
 def check_and_update_number_of_observations(chunk):
@@ -65,9 +69,11 @@ if __name__ == "__main__":
     parser.add_argument('--rechunk', help='If a file has already been chunkend, then it will be set to deleted in the FTP table, if this flag is used, the FTP table will be undeleted so that the data can be rechunked',
         action='store_true', default=False)
 
-
-    parser.add_argument('--download_chunk', help='Download file from a specified path.',
+    parser.add_argument('--download_file', help='Download file from a specified path.',
             action='store', type=str, metavar=('s3_path'))
+
+    parser.add_argument('--process_survey_timings', help='Process survey_timing files associated with study_id.',
+            action='store', type=str, metavar=('study_id'))
 
     args = parser.parse_args()
 
@@ -77,11 +83,11 @@ if __name__ == "__main__":
     if args.reindex is True:
         reindex_all_files_to_process()
 
-    if args.download_chunk:
-        outfile_name = os.path.basename(args.download_chunk)
-        study_id = args.download_chunk.split('/')[1]
-        print(f'downloding file at {study_id} :: {args.download_chunk} to {outfile_name}')
-        file_contents = s3_retrieve(args.download_chunk, study_id, raw_path=True)
+    if args.download_file:
+        outfile_name = os.path.basename(args.download_file)
+        study_id = args.download_file.split('/')[1]
+        print(f'downloding file at {study_id} :: {args.download_file} to {outfile_name}')
+        file_contents = s3_retrieve(args.download_file, study_id, raw_path=True)
         print(type(file_contents))
         print(len(file_contents))
         with open(outfile_name, 'wb') as ofd:
@@ -108,7 +114,6 @@ if __name__ == "__main__":
         # Process the desired number of files and calculate the number of unprocessed files
         retval = do_process_user_file_chunks_lambda_handler(event, [])
         print(retval)
-
         
     if args.check_creds:
         if check_for_client_key_pair(args.check_creds[0], args.check_creds[1]):
@@ -138,3 +143,36 @@ if __name__ == "__main__":
             pool.map(check_and_update_number_of_observations, chunks_to_fix)
             pool.close()
             pool.terminate()
+
+    if args.process_survey_timings:
+        file_contents = []
+        print(f'Processing survey timings in study {args.process_survey_timings}')
+
+        study = Study.objects.get(id=args.process_survey_timings)
+
+        for participant in study.participants.all():
+            #if participant.patient_id not in ['25rlmdr1']:
+                #continue
+
+            # go through and parse the survey timings files
+            for survey in study.surveys.all():
+                print(f'Processing survey timings for study {study.object_id}, participant {participant.patient_id}, survey {survey.object_id}')
+                survey_timings_prefix = '/'.join(['RAW_DATA', study.object_id, participant.patient_id,
+                                                  'surveyTimings', survey.object_id])
+                survey_timings_files = s3_list_files(survey_timings_prefix)
+                for survey_timings_file in survey_timings_files:
+                    print(f'processing {survey_timings_file}')
+                    survey_timings_info = s3_retrieve(survey_timings_file, study.object_id, raw_path=True)
+                    process_survey_timings_file(study, participant, survey, survey_timings_info)
+
+            # For android information about when surveys became available is stored in the app logs
+            if 'ANDROID' in participant.os_type:
+                survey_dict = {survey.object_id:survey for survey in study.surveys.all()}
+                app_log_prefix = '/'.join(['RAW_DATA', study.object_id, participant.patient_id, 'logFile']) 
+                app_log_files = s3_list_files(app_log_prefix)
+
+                for app_log_file in app_log_files:
+                    print(f'processing {app_log_file}')
+                    app_log_info = s3_retrieve(app_log_file, study.object_id, raw_path=True)
+                    process_app_log_file(study, participant, survey_dict, app_log_info)
+

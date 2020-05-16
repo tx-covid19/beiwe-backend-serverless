@@ -18,6 +18,10 @@ S3_BUCKET = getenv("S3_BUCKET")
 
 # Domain name for the server
 DOMAIN_NAME = getenv("DOMAIN_NAME")
+BEIWE_ROOT_DOMAIN = getenv("BEIWE_ROOT_DOMAIN")
+BEIWE_SUBDOMAIN = getenv("BEIWE_SUBDOMAIN")
+DIGITAL_SELFIE_SUBDOMAIN = getenv("DIGITAL_SELFIE_SUBDOMAIN")
+FITBIT_SUBDOMAIN = getenv("FITBIT_SUBDOMAIN")
 
 # A list of email addresses that will receive error emails. This value must be a
 # comma separated list; whitespace before and after addresses will be stripped.
@@ -38,3 +42,25 @@ S3_REGION_NAME = getenv("S3_REGION_NAME", "us-east-1")
 
 # Location of the downloadable Android APK file that'll be served from /download
 DOWNLOADABLE_APK_URL = getenv("DOWNLOADABLE_APK_URL", "https://s3.amazonaws.com/beiwe-app-backups/release/Beiwe-2.4.1-onnelaLabServer-release.apk")
+
+TIMEZONE = getenv('TIMEZONE')
+
+# connection keys for BOX integration
+BOX_clientID = getenv('BOX_clientID')
+BOX_clientSecret = getenv('BOX_clientSecret')
+BOX_enterpriseID = getenv('BOX_enterpriseID')
+BOX_registration_callback = getenv('BOX_registration_callback')
+
+PIPELINE_SG = getenv('PIPELINE_SG')
+
+# Redcap information
+REDCAP_CONSENT_FORM_NAME = getenv('REDCAP_CONSENT_FORM_NAME', 'online_consent_form')
+REDCAP_BEIWE_USERNAME_FIELD = getenv('REDCAP_BEIWE_USERNAME_FIELD', 'beiwe_username')
+REDCAP_BEIWE_PASSWORD_FIELD = getenv('REDCAP_BEIWE_PASSWORD_FIELD', 'beiwe_password')
+
+CDN_DOMAIN = getenv('CDN_DOMAIN')
+
+FITBIT_CLIENT_ID = getenv('FITBIT_CLIENT_ID')
+FITBIT_CLIENT_SECRET = getenv('FITBIT_CLIENT_SECRET')
+FITBIT_REDIRECT_URL = getenv('FITBIT_REDIRECT_URL')
+

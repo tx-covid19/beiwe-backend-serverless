@@ -68,7 +68,7 @@ def _do_retrieve(bucket_name, key_path, number_retries=DEFAULT_S3_RETRIES):
         if number_retries > 0:
             print("s3_retrieve failed, retrying on %s" % key_path)
             return _do_retrieve(bucket_name, key_path, number_retries=number_retries - 1)
-        
+
         raise
 
 
@@ -181,13 +181,13 @@ def get_client_public_key_string(patient_id, study_id) -> str:
     return encryption.prepare_X509_key_for_java(key_string).decode()
 
 
-def get_client_public_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
+def get_client_public_key(patient_id, study_id):
     """Grabs a user's public key file from s3."""
     key = s3_retrieve('/'.join([KEYS_FOLDER, study_id, patient_id + "_public"]), study_id, raw_path=True)
     return encryption.get_RSA_cipher(key)
 
 
-def get_client_private_key(patient_id, study_id) -> Crypto.PublicKey.RSA._RSAobj:
+def get_client_private_key(patient_id, study_id):
     """Grabs a user's private key file from s3."""
     key = s3_retrieve('/'.join([KEYS_FOLDER, study_id, patient_id + "_private"]), study_id, raw_path=True)
     return encryption.get_RSA_cipher(key)

@@ -15,8 +15,9 @@ from libs.http_utils import determine_os_api
 from libs.logging import log_error
 from libs.s3 import get_client_private_key, get_client_public_key_string, s3_upload
 from libs.sentry import make_sentry_client
-from libs.user_authentication import (authenticate_user, authenticate_user_registration,
-    minimal_validation)
+from libs.user_authentication import (authenticate_user, authenticate_user_registration, minimal_validation)
+
+from database.study_models import ParticipantSurvey
 
 ################################################################################
 ############################# GLOBALS... #######################################
@@ -186,6 +187,8 @@ def register_user(OS_API=""):
     phone_number = request.values['phone_number']
     device_id = request.values['device_id']
 
+    print(f"register {patient_id}: received registration for device {device_id}")
+
     # These values may not be returned by earlier versions of the beiwe app
     try: device_os = request.values['device_os']
     except BadRequestKeyError: device_os = "none"
@@ -218,12 +221,14 @@ def register_user(OS_API=""):
         # unique identifier) they user CAN reregister an existing device, the unlock key they
         # need to enter to at registration is their old password.
         # KG: 405 is good for IOS and Android, no need to check OS_API
+        print(f"register {patient_id}: Device {user.device_id} already registered for user, what is {device_id}?")
         return abort(405)
     
     if user.os_type and user.os_type != OS_API:
         # CASE: this patient has registered, but the user was previously registered with a
         # different device type. To keep the CSV munging code sane and data consistent (don't
         # cross the iOS and Android data streams!) we disallow it.
+        print(f"register {patient_id}: Device with operating system {user.os_type} already registered for user, cannot switch to {user.os_type}")
         return abort(400)
     
     # At this point the device has been checked for validity and will be registered successfully.
@@ -241,6 +246,7 @@ def register_user(OS_API=""):
                       beiwe_version)).encode()
     # print(file_contents + "\n")
     s3_upload(file_name, file_contents, study_id)
+    print(f"register {patient_id}: create {file_name} for pt identifiers")
     FileToProcess.append_file_for_processing(file_name, user.study.object_id, participant=user)
 
     # set up device.
@@ -249,8 +255,10 @@ def register_user(OS_API=""):
     user.set_password(request.values['new_password'])
     device_settings = user.study.device_settings.as_native_python()
     device_settings.pop('_id', None)
+    print(f"register {patient_id}: storing user {user.patient_id}")
     return_obj = {'client_public_key': get_client_public_key_string(patient_id, study_id),
                   'device_settings': device_settings}
+
     return json.dumps(return_obj), 200
 
 
@@ -287,6 +295,30 @@ def contains_valid_extension(file_name):
 ################################# Download #####################################
 ################################################################################
 
+def get_surveys_for_participant(participant, requesting_os):
+
+    survey_json_list = []
+    for survey in ParticipantSurvey.objects.filter(participant=participant, deleted=False):
+
+        try:
+            survey_dict = survey.as_native_python()
+        except:
+            print("Could not decode survey {0} {1}".format(survey.object_id, survey.name))
+            raise
+
+        # Make the dict look like the old Mongolia-style dict that the frontend is expecting
+        survey_dict.pop('id')
+        survey_dict.pop('deleted')
+        survey_dict.pop('name')
+        survey_dict['_id'] = survey_dict.pop('object_id')
+
+        # Exclude image surveys for the Android app to avoid crashing it
+        if requesting_os == "ANDROID" and survey.survey_type == "image_survey":
+            pass
+        else:
+            survey_json_list.append(survey_dict)
+
+    return survey_json_list
 
 @mobile_api.route('/download_surveys', methods=['GET', 'POST'])
 @mobile_api.route('/download_surveys/ios/', methods=['GET', 'POST'])
@@ -295,4 +327,10 @@ def contains_valid_extension(file_name):
 def get_latest_surveys(OS_API=""):
     participant = Participant.objects.get(patient_id=request.values['patient_id'])
     study = participant.study
-    return json.dumps(study.get_surveys_for_study(requesting_os=OS_API))
+    surveys = study.get_surveys_for_study(requesting_os=OS_API)
+    pt_surveys = get_surveys_for_participant(participant, requesting_os=OS_API)
+    if pt_surveys:
+        surveys += pt_surveys
+    print("received get_survey {0}: returning {1} surveys".format(request.values, len(surveys)))
+    return json.dumps(surveys)
+

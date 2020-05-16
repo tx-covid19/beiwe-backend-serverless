@@ -3,7 +3,14 @@
  * identifies the max and min per ROW and highlights based on that gradient
  */
 $(document).ready(function() {
-    $('#dashboard-datastream-table').DataTable();
+    $('#dashboard-datastream-table').DataTable({
+	dom: 'Bfrtip',
+        buttons: ['csv', 'excel'],
+    });
+    $('#dashboard-datastream-summary-table').DataTable({
+	dom: 'Bfrtip',
+        buttons: ['csv', 'excel'],
+    });
     $('#start_datetimepicker').datetimepicker({
         format: "YYYY-MM-DD",
         defaultDate: window.start_date,
