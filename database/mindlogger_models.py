@@ -39,7 +39,7 @@ class Response(AbstractMindloggerModel):
     value = JSONTextField()
 
 
-class Event(AbstractMindloggerModel):
+class ScheduleEvent(AbstractMindloggerModel):
     applet = models.ForeignKey(Applet, on_delete=models.CASCADE)
     activity = models.ForeignKey(Activity, on_delete=models.CASCADE)
     event = JSONTextField()

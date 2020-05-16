@@ -6,7 +6,7 @@ from django.db import transaction
 from flask import Blueprint, jsonify, request, abort
 from flask_jwt_extended import jwt_required
 
-from database.mindlogger_models import Applet, Activity, Screen, Event
+from database.mindlogger_models import Applet, Activity, Screen, ScheduleEvent
 from database.notification_models import NotificationTopic, NotificationEvent
 from database.study_models import Study
 from libs import eventbridge
@@ -95,7 +95,7 @@ def delete_applet(applet_id):
 @jwt_required
 def get_schedule(applet_id):
     try:
-        events = Event.objects.filter(applet__pk=applet_id)
+        events = ScheduleEvent.objects.filter(applet__pk=applet_id)
         return jsonify(assemble_outputs([json.loads(e.event) for e in list(events)])), 200
     except:
         return jsonify(assemble_outputs([])), 200
@@ -209,7 +209,7 @@ def set_schedule(applet_id):
             # remove the existing events and readd again
             # must clean up all push notifications because there might be many multiple events to one topic
             # which makes modifying existing records very tricky
-            Event.objects.filter(applet__pk=applet_id).delete()
+            ScheduleEvent.objects.filter(applet__pk=applet_id).delete()
             for activity in applet.activities.all():
                 NotificationEvent.objects.filter(topic__activity=activity).delete()
     except:
@@ -230,7 +230,7 @@ def set_schedule(applet_id):
             except:
                 return abort(400)
 
-            db_event = Event(applet=applet, activity=activity, event=json.dumps(event))
+            db_event = ScheduleEvent(applet=applet, activity=activity, event=json.dumps(event))
             db_event.save()
             event['id'] = db_event.pk
             db_event.event = json.dumps(event)
