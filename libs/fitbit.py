@@ -13,14 +13,19 @@ from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
 # noinspection PyUnresolvedReferences
 from config import load_django
 from config.fitbit_constants import TIME_SERIES_TYPES, INTRA_TIME_SERIES_TYPES
-from config.settings import (FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET, FITBIT_REDIRECT_URL, IS_SERVERLESS)
+from config.settings import (
+    FITBIT_CLIENT_ID,
+    FITBIT_CLIENT_SECRET,
+    FITBIT_REDIRECT_URL,
+    FITBIT_LAMBDA_ARN,
+    IS_SERVERLESS
+)
 
 from database.fitbit_models import (FitbitRecord, FitbitIntradayRecord, FitbitCredentials)
 from database.user_models import Participant
 
 from pipeline.boto_helpers import get_boto_client
 
-FITBIT_RECORDS_LAMBDA_NAME = 'arn:aws:lambda:us-east-1:476402459683:function:beiwe-fitbit-lambda'
 FITBIT_RECORDS_LAMBDA_RULE = 'beiwe-fitbit-{}-lambda'
 
 SCOPES = [
@@ -65,7 +70,7 @@ def create_fitbit_records_trigger(credential):
         Rule=rule_name,
         Targets=[
             {
-                'Arn': FITBIT_RECORDS_LAMBDA_NAME,
+                'Arn': FITBIT_LAMBDA_ARN,
                 'Id': 'fitbit_record_lambda',
                 'Input': json.dumps({"credential": str(credential.id)})
             }
