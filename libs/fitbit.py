@@ -148,6 +148,8 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
 
 def do_process_fitbit_records_lambda_handler(event, context):
 
+    print(f"Received from lambda: {event}")
+
     credential_id = event['credential']
     credential = FitbitCredentials.objects.get(pk=credential_id)
 
