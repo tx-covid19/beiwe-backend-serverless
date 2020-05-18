@@ -2,9 +2,18 @@ from datetime import datetime
 
 from django.db import models
 
+from config.constants import COVID_SUPPORTED_COUNTRIES
+from database.user_models import Participant
 from libs import timezone
-from .user_models import Participant
-from .userinfo_models import ParticipantInfo
+
+
+class ParticipantInfo(models.Model):
+    user = models.OneToOneField(Participant, on_delete=models.CASCADE)
+    country = models.CharField(max_length=100, choices=COVID_SUPPORTED_COUNTRIES)
+    zipcode = models.CharField(max_length=20)
+
+    # Pytz compatible
+    timezone = models.CharField(max_length=100)
 
 
 class TrackRecord(models.Model):
