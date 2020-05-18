@@ -139,7 +139,6 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
                 intra_date += delta
 
     except:
-        import traceback
         traceback.print_exc()
         
         return {}
@@ -277,9 +276,9 @@ def authorize(code, state):
             Payload=json.dumps({"credential": str(record.id)})
         )
     except:
-        pass
+        traceback.print_exc()
 
     try:
         create_fitbit_records_trigger(record)
     except:
-        pass
+        traceback.print_exc()
