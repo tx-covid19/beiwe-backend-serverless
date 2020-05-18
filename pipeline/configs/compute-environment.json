@@ -1,4 +1,5 @@
 {
+  "ec2KeyPair": "CC_BEIWE_CLUSTER_KEY",
   "type": "EC2",
   "minvCpus": 0,
   "desiredvCpus": 2,
