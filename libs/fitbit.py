@@ -20,7 +20,7 @@ from database.user_models import Participant
 
 from pipeline.boto_helpers import get_boto_client
 
-FITBIT_RECORDS_LAMBDA_NAME = 'beiwe-fitbit-lambda'
+FITBIT_RECORDS_LAMBDA_NAME = 'arn:aws:lambda:us-east-1:476402459683:function:beiwe-fitbit-lambda'
 FITBIT_RECORDS_LAMBDA_RULE = 'beiwe-fitbit-{}-lambda'
 
 SCOPES = [
