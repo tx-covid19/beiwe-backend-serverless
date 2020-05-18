@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import base64
 from collections import defaultdict
 from datetime import datetime, date, timedelta
@@ -12,14 +13,19 @@ from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
 # noinspection PyUnresolvedReferences
 from config import load_django
 from config.fitbit_constants import TIME_SERIES_TYPES, INTRA_TIME_SERIES_TYPES
-from config.settings import (FITBIT_CLIENT_ID, FITBIT_CLIENT_SECRET, FITBIT_REDIRECT_URL, IS_SERVERLESS)
+from config.settings import (
+    FITBIT_CLIENT_ID,
+    FITBIT_CLIENT_SECRET,
+    FITBIT_REDIRECT_URL,
+    FITBIT_LAMBDA_ARN,
+    IS_SERVERLESS
+)
 
 from database.fitbit_models import (FitbitRecord, FitbitIntradayRecord, FitbitCredentials)
 from database.user_models import Participant
 
 from pipeline.boto_helpers import get_boto_client
 
-FITBIT_RECORDS_LAMBDA_NAME = 'beiwe-fitbit-lambda'
 FITBIT_RECORDS_LAMBDA_RULE = 'beiwe-fitbit-{}-lambda'
 
 SCOPES = [
@@ -51,7 +57,7 @@ def create_fitbit_records_trigger(credential):
             Ids=[target['Id'] for target in targets['Targets']],
         )
         client.delete_rule(Name=rule_name)
-    except client.exceptions.ResourceNotFoundException as e:
+    except Exception as e:
         pass
 
     client.put_rule(
@@ -64,9 +70,9 @@ def create_fitbit_records_trigger(credential):
         Rule=rule_name,
         Targets=[
             {
-                'Arn': FITBIT_RECORDS_LAMBDA_NAME,
+                'Arn': FITBIT_LAMBDA_ARN,
                 'Id': 'fitbit_record_lambda',
-                'Input': '{"credential": "{}"}'.format(credential.id)
+                'Input': json.dumps({"credential": str(credential.id)})
             }
         ]
     )
@@ -169,7 +175,7 @@ def do_process_fitbit_records_lambda_handler(event, context):
     }
 
 
-def recreate_firbit_records_trigger():
+def recreate_fitbit_records_trigger():
     for credential in FitbitCredentials.objects.all():
         create_fitbit_records_trigger(credential)
 
