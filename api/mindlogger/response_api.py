@@ -36,7 +36,7 @@ def add_response(applet_id, activity_id):
     try:
         with transaction.atomic():
             for key, value in resp.items():
-                screen = Screen.objects.get(URI__exact=key, activity__pk=activity_id)
+                screen = Screen.objects.get(URI__exact=key, activity__pk=activity_id, activity__applet__pk=applet_id)
                 Response(user=user, screen=screen, value=json.dumps(value)).save()
         return jsonify({}), 200
     except:
