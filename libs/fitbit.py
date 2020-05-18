@@ -26,6 +26,11 @@ from database.user_models import Participant
 
 from pipeline.boto_helpers import get_boto_client
 
+
+pipeline_region = os.getenv("pipeline_region", None)
+if not pipeline_region:
+    pipeline_region = 'us-east-1'
+
 FITBIT_RECORDS_LAMBDA_RULE = 'beiwe-fitbit-{}-lambda'
 
 SCOPES = [
@@ -41,10 +46,6 @@ SCOPES = [
 ]
 
 def create_fitbit_records_trigger(credential):
-
-    pipeline_region = os.getenv("pipeline_region", None)
-    if not pipeline_region:
-        pipeline_region = 'us-east-1'
     client = get_boto_client('events', pipeline_region)
 
     rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
@@ -138,7 +139,6 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
                 intra_date += delta
 
     except:
-        import traceback
         traceback.print_exc()
         
         return {}
@@ -269,6 +269,16 @@ def authorize(code, state):
         raise Exception('INTERNAL_ERROR')
 
     try:
+        client = get_boto_client('lambda', pipeline_region)
+        client.invoke(
+            FunctionName=FITBIT_LAMBDA_ARN,
+            InvocationType='Event',
+            Payload=json.dumps({"credential": str(record.id)})
+        )
+    except:
+        traceback.print_exc()
+
+    try:
         create_fitbit_records_trigger(record)
     except:
-        pass
+        traceback.print_exc()
