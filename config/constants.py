@@ -34,7 +34,6 @@ MEDIA_EXTENSIONS = [".mp4", ".wav", ".jpg"]
 FILE_TYPES = ['gps', 'accel', 'voiceRecording', 'powerState', 'callLog', 'textLog',
               'bluetoothLog', 'surveyAnswers', 'surveyTimings', 'imageSurvey']
 
-
 # HTML lists
 CHECKBOX_TOGGLES = ["accelerometer",
                     "gps",
@@ -58,7 +57,7 @@ TIMER_VALUES = ["accelerometer_off_duration_seconds",
                 "accelerometer_on_duration_seconds",
                 "bluetooth_on_duration_seconds",
                 "bluetooth_total_duration_seconds",
-                "bluetooth_global_offset_seconds", 
+                "bluetooth_global_offset_seconds",
                 "check_for_new_surveys_frequency_seconds",
                 "create_new_data_files_frequency_seconds",
                 "gps_off_duration_seconds",
@@ -185,7 +184,6 @@ complete_data_stream_dict = {
     "StdFlightLen_km": "Standard Flight Length (km)",
     "MaxHomeDist_km": "Maximum Home Distance (km)",
 }
-
 
 ALL_DATA_STREAMS = [ACCELEROMETER,
                     ANDROID_LOG_FILE,
@@ -365,3 +363,10 @@ class ResearcherRole(object):
 ALL_RESEARCHER_TYPES = (ResearcherRole.study_admin, ResearcherRole.researcher)
 ALL_JOB_TYPES = ["copy_to_box", "run_pipeline"]
 PIPELINE_THREADS = 8
+
+COVID_SUPPORTED_COUNTRIES = [
+    ('us', 'United States of America'),
+    ('ca', 'Canada'),
+    ('br', 'Brazil'),
+    ('mx', 'Mexico')
+]
