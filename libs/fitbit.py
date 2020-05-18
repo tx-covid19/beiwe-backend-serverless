@@ -89,40 +89,52 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
         refresh_cb=update_cb
     )
 
-    intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
-
     try:
-        # res['devices'] = client.get_devices()
-        # res['friends'] = client.get_friends()
-        # res['friends_leaderboard'] = client.get_friends_leaderboard()
+        res['devices'] = client.get_devices()
+        res['friends'] = client.get_friends()
+        res['friends_leaderboard'] = client.get_friends_leaderboard()
         
         res['time_series'] = defaultdict(dict)
         res['intra_time_series'] = defaultdict(dict)
 
         for k, type_str in TIME_SERIES_TYPES.items():
+
+            print(f"Fetching {k} time series")
+
             record = client.time_series(k, base_date=base_date, end_date=end_date)
             data = record[k.replace('/', '-')]
             for dp in data:
                 date = dp['dateTime']
                 res['time_series'][date][k.replace('/', '_')] = dp['value']
 
+        intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
         end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         for k, type_str in INTRA_TIME_SERIES_TYPES.items():
+            
+            print(f"Fetching {k} intra-day time series")
+
             delta = timedelta(days=1)
             intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
             while intra_date <= end_date:
                 intra_date_fmt = intra_date.strftime("%Y-%m-%d")
-                if intra_date_fmt in fetched_dates:
-                    continue
 
-                record = client.intraday_time_series(k, base_date=intra_date_fmt)
+                print(f"- Day: {intra_date_fmt}", end="")
+                if intra_date_fmt not in fetched_dates:
 
-                k_db = k.replace('/', '_')
-                k_api = k.replace('/', '-')
-                data = record[f"{k_api}-intraday"]
-                for metric in data['dataset']:
-                    metric_datetime = f"{intra_date} {metric['time']}"
-                    res['intra_time_series'][metric_datetime][k_db] = metric['value']
+                    print(f": fetching")
+
+                    record = client.intraday_time_series(k, base_date=intra_date_fmt)
+
+                    k_db = k.replace('/', '_')
+                    k_api = k.replace('/', '-')
+                    data = record[f"{k_api}-intraday"]
+                    for metric in data['dataset']:
+                        metric_datetime = f"{intra_date} {metric['time']}"
+                        res['intra_time_series'][metric_datetime][k_db] = metric['value']
+
+                else:
+                    print()
+
                 intra_date += delta
 
     except:
@@ -139,19 +151,22 @@ def do_process_fitbit_records_lambda_handler(event, context):
     credential_id = event['credential']
     credential = FitbitCredentials.objects.get(pk=credential_id)
 
+    user = credential.user
+    access_token = credential.access_token
+    refresh_token = credential.refresh_token
+
+    print(f"Fetching dates for user {user.patient_id}")
+
     fetched_dates = set([
         d['last_updated'].strftime('%Y-%m-%d')
         for d in FitbitIntradayRecord.objects.filter(user=1).values('last_updated').values('last_updated')
     ])
 
     def update_token(token_dict):
+        print("Updating token")
         credential.access_token = token_dict['access_token']
         credential.refresh_token = token_dict['refresh_token']
         credential.save()
-
-    user = credential.user
-    access_token = credential.access_token
-    refresh_token = credential.refresh_token
 
     # There is a max time range
     res = get_fitbit_record(
@@ -162,10 +177,12 @@ def do_process_fitbit_records_lambda_handler(event, context):
     )
 
     if 'time_series' in res:
+        print(f"Fetched {len(res['time_series'])}")
         for time, data in res['time_series'].items():
             FitbitRecord(user=user, last_updated=time, devices=res['devices'], **data).save()
 
     if 'intra_time_series' in res:
+        print(f"Fetched {len(res['intra_time_series'])}")
         for time, data in res['intra_time_series'].items():
             FitbitIntradayRecord(user=user, last_updated=time, **data).save()
 
