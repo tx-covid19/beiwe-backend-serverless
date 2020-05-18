@@ -51,7 +51,7 @@ def create_fitbit_records_trigger(credential):
             Ids=[target['Id'] for target in targets['Targets']],
         )
         client.delete_rule(Name=rule_name)
-    except client.exceptions.ResourceNotFoundException as e:
+    except Exception as e:
         pass
 
     client.put_rule(
@@ -66,7 +66,7 @@ def create_fitbit_records_trigger(credential):
             {
                 'Arn': FITBIT_RECORDS_LAMBDA_NAME,
                 'Id': 'fitbit_record_lambda',
-                'Input': '{"credential": "{}"}'.format(credential.id)
+                'Input': json.dumps({"credential": str(credential.id)})
             }
         ]
     )
