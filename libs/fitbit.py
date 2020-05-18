@@ -169,7 +169,7 @@ def do_process_fitbit_records_lambda_handler(event, context):
     }
 
 
-def recreate_firbit_records_trigger():
+def recreate_fitbit_records_trigger():
     for credential in FitbitCredentials.objects.all():
         create_fitbit_records_trigger(credential)
 
