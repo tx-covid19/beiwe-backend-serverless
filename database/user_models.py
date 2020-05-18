@@ -110,7 +110,7 @@ class Participant(AbstractPasswordUser):
     @classmethod
     def create(cls, password, **kwargs):
         """
-        Creates a new participant with randomly generated patient_id and password.
+        Creates a new participant.
         """
         participant = cls(**kwargs)
         participant.set_password(password)

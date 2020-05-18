@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import jinja2
 from flask import Flask, redirect, render_template
@@ -8,6 +8,8 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from raven.contrib.flask import Sentry
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask_jwt_extended import JWTManager
+
 from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api, external_api,
@@ -22,10 +24,16 @@ from database.token_models import TokenBlacklist
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
 from pages import (admin_pages, data_access_web_form, mobile_pages, survey_designer,
-                   system_admin_pages, digital_selfie_web_form)
+    system_admin_pages, digital_selfie_web_form, fitbit_web_form)
+
+from flask_cdn import CDN, url_for
 
 cdn = CDN()
 
+def envopts(local, prod):
+    if DOMAIN_NAME == 'localhost':
+        return local
+    return prod
 
 def subdomain(directory):
     app = Flask(__name__, static_folder=directory + "/static", subdomain_matching=True)
@@ -49,6 +57,10 @@ def subdomain(directory):
     loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
     app.jinja_loader = jinja2.ChoiceLoader(loader)
     app.wsgi_app = ProxyFix(app.wsgi_app)
+
+    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+    app.config['CDN_DOMAIN'] = CDN_DOMAIN
+
     cdn.init_app(app)
     print(app.config['CDN_DOMAIN'])
 
@@ -56,8 +68,7 @@ def subdomain(directory):
 
 
 # Register pages here
-print(
-    f'Configuring {DOMAIN_NAME} with {BEIWE_SUBDOMAIN}, {DIGITAL_SELFIE_SUBDOMAIN}, {FITBIT_SUBDOMAIN}, static loaded from {CDN_DOMAIN}')
+print(f'Configuring {DOMAIN_NAME} with {BEIWE_SUBDOMAIN}, {DIGITAL_SELFIE_SUBDOMAIN}, {FITBIT_SUBDOMAIN}, static loaded from {CDN_DOMAIN}')
 
 app = subdomain("frontend")
 app.config['SERVER_NAME'] = BEIWE_ROOT_DOMAIN
@@ -111,7 +122,7 @@ app.register_blueprint(redcap_api.redcap_api, subdomain=BEIWE_SUBDOMAIN)
 app.register_blueprint(fitbit_api.fitbit_api, subdomain=FITBIT_SUBDOMAIN)
 
 # Don't set up Sentry for local development
-if os.environ['DJANGO_DB_ENV'] != 'local':
+if os.environ['DJANGO_DB_ENV'] not in ['local', 'docker']:
     sentry = Sentry(app, dsn=SENTRY_ELASTIC_BEANSTALK_DSN)
 
 
