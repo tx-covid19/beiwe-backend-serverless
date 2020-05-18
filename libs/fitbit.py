@@ -180,13 +180,21 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
     if 'time_series' in res:
         print(f"Fetched {len(res['time_series'])}")
+
+        records = []
         for time, data in res['time_series'].items():
-            FitbitRecord(user=user, last_updated=time, devices=res['devices'], **data).save()
+            records += [FitbitRecord(user=user, last_updated=time, devices=res['devices'], **data)]
+        
+        FitbitRecord.objects.bulk_create(records)
 
     if 'intra_time_series' in res:
         print(f"Fetched {len(res['intra_time_series'])}")
+
+        records = []
         for time, data in res['intra_time_series'].items():
-            FitbitIntradayRecord(user=user, last_updated=time, **data).save()
+            records += [FitbitIntradayRecord(user=user, last_updated=time, **data)]
+
+        FitbitIntradayRecord.objects.bulk_create(records)
 
     return {
         'statusCode': 200,
