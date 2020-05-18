@@ -1,22 +1,20 @@
 import base64
 import datetime
 import hashlib
-import json
 
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import (
-    create_access_token, jwt_required, get_jwt_identity
+    create_access_token, jwt_required, get_jwt_identity, get_raw_jwt
 )
 
-from database.mindlogger_models import UserDevice, Activity, Applet
-from database.notification_models import NotificationSubscription
+from database.mindlogger_models import UserDevice
+from database.token_models import TokenBlacklist
 from database.user_models import Participant
-from libs import sns
 
-user_api = Blueprint('user_api', __name__)
+auth_api = Blueprint('auth_api', __name__)
 
 
-@user_api.route('/authentication', methods=['GET'])
+@auth_api.route('/authentication', methods=['GET'])
 def authentication():
     if 'Authorization' in request.headers:
         auth = request.headers.get('Authorization')
@@ -45,6 +43,7 @@ def authentication():
     if not participant.validate_password(encoded_pwd):
         return jsonify({'message': 'Incorrect user or password.', 'type': 'access'}), 401
 
+    # UserDevice is only for mindlogger
     device_id = request.headers.get('deviceId', '')
     timezone = int(request.headers.get('timezone', 0))
     if device_id:
@@ -54,7 +53,7 @@ def authentication():
         else:
             UserDevice(user=participant, timezone=timezone, device_id=device_id).save()
 
-    expires = datetime.timedelta(days=365)
+    expires = datetime.timedelta(days=30)
     token = create_access_token(user_id, expires_delta=expires)
     expire_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     return {"authToken": {"expires": expire_time,
@@ -79,63 +78,14 @@ def authentication():
             }
 
 
-@user_api.route('/authentication', methods=['DELETE'])
+@auth_api.route('/authentication', methods=['DELETE'])
 @jwt_required
 def logout():
     patient_id = get_jwt_identity()
+    TokenBlacklist.blacklist_token(get_raw_jwt())
     try:
         user_device = UserDevice.objects.get(user__patient_id__exact=patient_id)
         user_device.delete()
-        return jsonify({'message': 'Log out successfully.'}), 200
     except:
-        return abort(500)
-
-
-def subscribe_topic_if_not(applet: Applet, activity: Activity, participant: Participant):
-    # only when user login on mobile device, do the subscription check
-    if hasattr(participant, 'user_device') and participant.user_device.device_id and hasattr(activity,
-                                                                                             'notification_topic'):
-        topic = activity.notification_topic
-        subscription_set = NotificationSubscription.objects.filter(subscriber=participant.user_device, topic=topic)
-        if not subscription_set.exists():
-            subscription_arn = sns.subscribe_to_topic(topic.sns_topic_arn, participant.user_device.endpoint_arn)
-            if subscription_arn:
-                NotificationSubscription(subscriber=participant.user_device, topic=topic,
-                                         subscription_arn=subscription_arn).save()
-
-
-@user_api.route('/applets', methods=['GET'])
-@jwt_required
-def get_own_applets():
-    patient_id = get_jwt_identity()
-    res_list = []
-    try:
-        participant = Participant.objects.get(patient_id__exact=patient_id)
-        applets = participant.study.applets.all()
-        for applet in applets:
-            item = {'groups': ["1"], 'activities': {}, 'items': {}, 'protocol': json.loads(applet.protocol),
-                    'applet': json.loads(applet.content)}
-            for activity in applet.activities.all():
-                content = activity.content
-                data = json.loads(content)
-                item['activities'][activity.URI] = data
-
-                # check subscription list every time when refreshing the page
-                # in case that there may new applets added after user finishes registration.
-                subscribe_topic_if_not(applet, activity, participant)
-
-                for screen in activity.screens.all():
-                    name = screen.URI
-                    content = screen.content
-                    item['items'][name] = json.loads(content)
-
-            res_list.append(item)
-        return jsonify(res_list), 200
-    except:
-        return jsonify(res_list), 200
-
-
-# always return empty array
-@user_api.route('/invites', methods=['GET'])
-def get_invites():
-    return jsonify([]), 200
+        pass
+    return jsonify({'message': 'Log out successfully.'}), 200
