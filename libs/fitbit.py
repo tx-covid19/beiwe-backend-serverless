@@ -66,7 +66,7 @@ def create_fitbit_records_trigger(credential):
             {
                 'Arn': FITBIT_RECORDS_LAMBDA_NAME,
                 'Id': 'fitbit_record_lambda',
-                'Input': '{"credential": "{}"}'.format(credential.id)
+                'Input': json.dumps({"credential": str(credential.id)})
             }
         ]
     )
