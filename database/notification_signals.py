@@ -1,11 +1,10 @@
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
+from config.settings import PLATFORM_ARN
 from database.mindlogger_models import UserDevice, Activity
 from database.notification_models import NotificationTopic, NotificationSubscription, NotificationEvent
 from libs import sns, eventbridge
-
-PLATFORM_ARN = ''
 
 
 @receiver(post_save, sender=UserDevice)
