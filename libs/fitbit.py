@@ -90,56 +90,50 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
         refresh_cb=update_cb
     )
 
-    try:
-        print(f"Fetching singular data")
-        yield 'devices', client.get_devices()
-        yield 'friends', client.get_friends()
-        yield 'friends_leaderboard', client.get_friends_leaderboard()
+    print(f"Fetching singular data")
+    yield 'devices', client.get_devices()
+    yield 'friends', client.get_friends()
+    yield 'friends_leaderboard', client.get_friends_leaderboard()
+    
+    res = defaultdict(dict)
+    for k, type_str in TIME_SERIES_TYPES.items():
+        print(f"Fetching {k} time series")
+
+        record = client.time_series(k, base_date=base_date, end_date=end_date)
+        data = record[k.replace('/', '-')]
+        for dp in data:
+            date = dp['dateTime']
+            res[date][k.replace('/', '_')] = dp['value']
+
+    yield 'time_series', res
+
+
+    delta = timedelta(days=1)
+    intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
+    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+    while intra_date <= end_date:
+        intra_date_fmt = intra_date.strftime("%Y-%m-%d")
+
+        if intra_date_fmt not in fetched_dates:
+            print(f"Day: {intra_date_fmt}")
+
+            res = defaultdict(dict)
+            for k, type_str in INTRA_TIME_SERIES_TYPES.items():
         
-        res = defaultdict(dict)
-        for k, type_str in TIME_SERIES_TYPES.items():
-            print(f"Fetching {k} time series")
+                print(f"- fetching {k} intra-day time series")
 
-            record = client.time_series(k, base_date=base_date, end_date=end_date)
-            data = record[k.replace('/', '-')]
-            for dp in data:
-                date = dp['dateTime']
-                res[date][k.replace('/', '_')] = dp['value']
+                record = client.intraday_time_series(k, base_date=intra_date_fmt)
 
-        yield 'time_series', res
+                k_db = k.replace('/', '_')
+                k_api = k.replace('/', '-')
+                data = record[f"{k_api}-intraday"]
+                for metric in data['dataset']:
+                    metric_datetime = f"{intra_date} {metric['time']}"
+                    res[metric_datetime][k_db] = metric['value']
 
+            yield 'intra_time_series', res
 
-        delta = timedelta(days=1)
-        intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-        while intra_date <= end_date:
-            intra_date_fmt = intra_date.strftime("%Y-%m-%d")
-
-            if intra_date_fmt not in fetched_dates:
-                print(f"Day: {intra_date_fmt}")
-
-                res = defaultdict(dict)
-                for k, type_str in INTRA_TIME_SERIES_TYPES.items():
-            
-                    print(f"- fetching {k} intra-day time series")
-
-                    record = client.intraday_time_series(k, base_date=intra_date_fmt)
-
-                    k_db = k.replace('/', '_')
-                    k_api = k.replace('/', '-')
-                    data = record[f"{k_api}-intraday"]
-                    for metric in data['dataset']:
-                        metric_datetime = f"{intra_date} {metric['time']}"
-                        res[metric_datetime][k_db] = metric['value']
-
-                yield 'intra_time_series', res
-
-            intra_date += delta
-
-    except:
-        traceback.print_exc()
-        
-        return {}
+        intra_date += delta
 
 
 def do_process_fitbit_records_lambda_handler(event, context):
@@ -171,35 +165,43 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
     fixed_info = {}
 
-    # There is a max time range
-    for restype, res in get_fitbit_record(
-        access_token, refresh_token,
-        initial_date, final_date,
-        update_token, fetched_dates
-    ):
-        if restype in ['devices', 'friends', 'friends_leaderboard']:
-            fixed_info[restype] = res
+    try:
+        # There is a max time range
+        for restype, res in get_fitbit_record(
+            access_token, refresh_token,
+            initial_date, final_date,
+            update_token, fetched_dates
+        ):
+            if restype in ['devices', 'friends', 'friends_leaderboard']:
+                fixed_info[restype] = res
 
-        if restype == 'time_series':
-            records = []
-            for time, data in res.items():
-                records += [
-                    FitbitRecord(user=user, last_updated=time, **fixed_info, **data)
-                ]
-            FitbitRecord.objects.bulk_create(records)
+            if restype == 'time_series':
+                records = []
+                for time, data in res.items():
+                    records += [
+                        FitbitRecord(user=user, last_updated=time, **fixed_info, **data)
+                    ]
+                FitbitRecord.objects.bulk_create(records)
 
-        if restype == 'intra_time_series':
-            records = []
-            for time, data in res.items():
-                records += [
-                    FitbitIntradayRecord(user=user, last_updated=time, **data)
-                ]
-            FitbitIntradayRecord.objects.bulk_create(records)
-
-    return {
-        'statusCode': 200,
-        'body': 'Lambda finished!'
-    }
+            if restype == 'intra_time_series':
+                records = []
+                for time, data in res.items():
+                    records += [
+                        FitbitIntradayRecord(user=user, last_updated=time, **data)
+                    ]
+                FitbitIntradayRecord.objects.bulk_create(records)
+    except Exception as e:
+        traceback.print_exc()
+        
+        return {
+            'statusCode': 500,
+            'body': str(e)
+        }
+    else:
+        return {
+            'statusCode': 200,
+            'body': 'Lambda finished!'
+        }
 
 
 def recreate_fitbit_records_trigger():
