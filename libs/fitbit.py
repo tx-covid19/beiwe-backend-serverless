@@ -46,28 +46,34 @@ SCOPES = [
 ]
 
 def create_fitbit_records_trigger(credential):
-    client = get_boto_client('events', pipeline_region)
+    events_client = get_boto_client('events', pipeline_region)
+    lambda_client = get_boto_client('lambda', pipeline_region)
 
     rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
+    permission_name = f"{rule_name}-event"
 
     try:
-        client.describe_rule(Name=rule_name)
-        targets = client.list_targets_by_rule(Rule=rule_name)
-        client.remove_targets(
+        events_client.describe_rule(Name=rule_name)
+        targets = events_client.list_targets_by_rule(Rule=rule_name)
+        events_client.remove_targets(
             Rule=rule_name,
             Ids=[target['Id'] for target in targets['Targets']],
         )
-        client.delete_rule(Name=rule_name)
+        events_client.delete_rule(Name=rule_name)
+        lambda_client.remove_permission(
+            FunctionName=FITBIT_LAMBDA_ARN,
+            StatementId=permission_name,
+        )
     except Exception as e:
         pass
 
-    client.put_rule(
+    rule = events_client.put_rule(
         Name=rule_name,
         ScheduleExpression='rate(4 hours)',
         State='ENABLED'
     )
 
-    client.put_targets(
+    events_client.put_targets(
         Rule=rule_name,
         Targets=[
             {
@@ -76,6 +82,14 @@ def create_fitbit_records_trigger(credential):
                 'Input': json.dumps({"credential": str(credential.id)})
             }
         ]
+    )
+
+    lambda_client.add_permission(
+        FunctionName=FITBIT_LAMBDA_ARN,
+        StatementId=permission_name,
+        Action="lambda:InvokeFunction",
+        Principal="events.amazonaws.com",
+        SourceArn=rule['RuleArn'],
     )
 
 
