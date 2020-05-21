@@ -153,7 +153,7 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
 
                 print(f"- fetching {k} intra-day time series")
 
-                record = client.intraday_time_series(k, base_date=intra_date_fmt, period='1m')
+                record = client.intraday_time_series(k, base_date=intra_date_fmt, detail_level='1m')
 
                 k_db = k.replace('/', '_')
                 k_api = k.replace('/', '-')
