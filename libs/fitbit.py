@@ -93,6 +93,16 @@ def create_fitbit_records_trigger(credential):
     )
 
 
+def get_fitbit_client(access_token, refresh_token, update_cb=None):
+    return fitbit.Fitbit(
+        FITBIT_CLIENT_ID,
+        FITBIT_CLIENT_SECRET,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        refresh_cb=update_cb
+    )
+
+
 def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_cb, fetched_dates):
     res = {}
 
@@ -108,7 +118,9 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
     yield 'devices', client.get_devices()
     yield 'friends', client.get_friends()
     yield 'friends_leaderboard', client.get_friends_leaderboard()
-    
+
+    BMR = {}
+
     res = defaultdict(dict)
     for k, type_str in TIME_SERIES_TYPES.items():
         print(f"Fetching {k} time series")
@@ -117,7 +129,12 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
         data = record[k.replace('/', '-')]
         for dp in data:
             date = dp['dateTime']
+            if date in fetched_dates:
+                continue
             res[date][k.replace('/', '_')] = dp['value']
+
+            if k == 'activities/caloriesBMR':
+                BMR[date] = (float(dp['value']) / 24. / 60.) + 0.005 # corretion for daily spec
 
     yield 'time_series', res
 
@@ -133,17 +150,23 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
 
             res = defaultdict(dict)
             for k, type_str in INTRA_TIME_SERIES_TYPES.items():
-        
+
                 print(f"- fetching {k} intra-day time series")
 
-                record = client.intraday_time_series(k, base_date=intra_date_fmt)
+                record = client.intraday_time_series(k, base_date=intra_date_fmt, period='1m')
 
                 k_db = k.replace('/', '_')
                 k_api = k.replace('/', '-')
                 data = record[f"{k_api}-intraday"]
                 for metric in data['dataset']:
-                    metric_datetime = f"{intra_date} {metric['time']}"
-                    res[metric_datetime][k_db] = metric['value']
+
+                    threshold = 0.0
+                    if k == 'activities/calories':
+                        threshold = BMR.get(intra_date, 0.0)
+
+                    if threshold > metric['value']:
+                        metric_datetime = f"{intra_date} {metric['time']}"
+                        res[metric_datetime][k_db] = metric['value']
 
             yield 'intra_time_series', res
 
@@ -168,7 +191,7 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
     fetched_dates = set([
         d['last_updated'].strftime('%Y-%m-%d')
-        for d in FitbitIntradayRecord.objects.filter(user=1).values('last_updated').values('last_updated')
+        for d in FitbitRecord.objects.filter(user=user).values('last_updated').values('last_updated')
     ])
 
     def update_token(token_dict):
@@ -206,7 +229,7 @@ def do_process_fitbit_records_lambda_handler(event, context):
                 FitbitIntradayRecord.objects.bulk_create(records)
     except Exception as e:
         traceback.print_exc()
-        
+
         return {
             'statusCode': 500,
             'body': str(e)
@@ -222,7 +245,7 @@ def recreate_fitbit_records_trigger():
     for credential in FitbitCredentials.objects.all():
         create_fitbit_records_trigger(credential)
 
-    
+
 def get_client_token():
     return base64.b64encode(
         "{}:{}".format(
@@ -244,7 +267,7 @@ def redirect(patient_id):
         )
 
     return url
-        
+
 
 def authorize(code, state):
     try:

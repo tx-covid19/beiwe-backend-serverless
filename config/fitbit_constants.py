@@ -24,4 +24,5 @@ INTRA_TIME_SERIES_TYPES = {
     'activities/calories': 'float',
     'activities/steps': '+int',
     'activities/distance': 'float',
+    'activities/heart': 'float',
 }
