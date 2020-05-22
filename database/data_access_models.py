@@ -114,13 +114,15 @@ class ChunkRegistry(AbstractModel):
         
         if data_type in CHUNKABLE_FILES:
             raise ChunkableDataTypeError
-       
-        # unchunkable data may be binary, so leave the file_size calcuation in bytes
+      
+        # calculate a hash
+        chunk_hash_str = chunk_hash(file_contents).decode()
 
+        # unchunkable data may be binary, so leave the file_size calcuation in bytes
         cls.objects.create(
             is_chunkable=False,
             chunk_path=chunk_path,
-            chunk_hash='',
+            chunk_hash=chunk_hash_str,
             data_type=data_type,
             time_bin=time_bin,
             study_id=study_id,
