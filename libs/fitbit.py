@@ -153,7 +153,7 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
 
                 print(f"- fetching {k} intra-day time series")
 
-                record = client.intraday_time_series(k, base_date=intra_date_fmt, detail_level='1m')
+                record = client.intraday_time_series(k, base_date=intra_date_fmt, detail_level='1min')
 
                 k_db = k.replace('/', '_')
                 k_api = k.replace('/', '-')
@@ -185,7 +185,9 @@ def do_process_fitbit_records_lambda_handler(event, context):
     refresh_token = credential.refresh_token
 
     initial_date = '2020-05-01'
-    final_date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday_date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
+    today_date = datetime.utcnow().strftime('%Y-%m-%d')
+    tomorrow_date = (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
 
     print(f"Fetching dates for user {user.patient_id}")
 
@@ -193,6 +195,8 @@ def do_process_fitbit_records_lambda_handler(event, context):
         d['last_updated'].strftime('%Y-%m-%d')
         for d in FitbitRecord.objects.filter(user=user).values('last_updated').values('last_updated')
     ])
+
+    fetched_dates -= set([yesterday_date, today_date])
 
     def update_token(token_dict):
         print("Updating token")
@@ -206,7 +210,7 @@ def do_process_fitbit_records_lambda_handler(event, context):
         # There is a max time range
         for restype, res in get_fitbit_record(
             access_token, refresh_token,
-            initial_date, final_date,
+            initial_date, today_date,
             update_token, fetched_dates
         ):
             if restype in ['devices', 'friends', 'friends_leaderboard']:
@@ -214,19 +218,48 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
             if restype == 'time_series':
                 records = []
+                has_yesterday = False
+                has_today = False
                 for time, data in res.items():
+
+                    if time == today_date:
+                        has_today = True
+                    if time == yesterday_date:
+                        has_yesterday = True
+
                     records += [
                         FitbitRecord(user=user, last_updated=time, **fixed_info, **data)
                     ]
+
+                if has_yesterday:
+                    FitbitRecord.objects.filter(last_updated=yesterday_date).delete()
+                if has_today:
+                    FitbitRecord.objects.filter(last_updated=today_date).delete()
+
                 FitbitRecord.objects.bulk_create(records)
 
             if restype == 'intra_time_series':
                 records = []
+                has_yesterday = False
+                has_today = False
                 for time, data in res.items():
+
+                    if time[0:10] == today_date:
+                        has_today = True
+                    if time[0:10] == yesterday_date:
+                        has_yesterday = True
+
                     records += [
                         FitbitIntradayRecord(user=user, last_updated=time, **data)
                     ]
+
+                if has_yesterday:
+                    FitbitIntradayRecord.objects.filter(last_updated__range=[yesterday_date, today_date]).delete()
+                if has_today:
+                    FitbitIntradayRecord.objects.filter(last_updated__range=[today_date, tomorrow_date]).delete()
+
                 FitbitIntradayRecord.objects.bulk_create(records)
+
     except Exception as e:
         traceback.print_exc()
 
