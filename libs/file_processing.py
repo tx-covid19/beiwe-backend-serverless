@@ -18,7 +18,7 @@ from config import load_django
 from config.settings import IS_SERVERLESS
 from config.constants import (ACCELEROMETER, ANDROID_LOG_FILE, API_TIME_FORMAT, CALL_LOG,
     CHUNK_TIMESLICE_QUANTUM, CHUNKABLE_FILES, CHUNKS_FOLDER, CONCURRENT_NETWORK_OPS,
-    DATA_PROCESSING_NO_ERROR_STRING, FILE_PROCESS_PAGE_SIZE, IDENTIFIERS, IOS_LOG_FILE,
+    DATA_PROCESSING_NO_ERROR_STRING, DIGITAL_SELFIE, FILE_PROCESS_PAGE_SIZE, IDENTIFIERS, IOS_LOG_FILE,
     SURVEY_DATA_FILES, SURVEY_TIMINGS, UPLOAD_FILE_TYPE_MAPPING, WIFI)
 from database.data_access_models import ChunkRegistry, FileProcessLock, FileToProcess
 from database.study_models import Survey
@@ -238,7 +238,13 @@ def do_process_user_file_chunks_lambda_handler(event, context):
 
             # if not data['chunkable']
             else:
-                timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
+
+                if data['data_type'] == DIGITAL_SELFIE:
+                    timestamp_string = data['ftp']['s3_file_path'].rsplit("/")[-1][:-4].split("_")[-1].rsplit('.')[0]
+                    timestamp = int(datetime.strptime(timestamp_string, API_TIME_FORMAT).timestamp())
+                else:
+                    timestamp = clean_java_timecode(data['ftp']["s3_file_path"].rsplit("/", 1)[-1][:-4])
+
                 # Since we aren't binning the data by hour, just create a ChunkRegistry that
                 # points to the already existing S3 file.
                 ChunkRegistry.register_unchunked_data(

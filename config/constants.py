@@ -110,6 +110,7 @@ PROXIMITY = "proximity"
 GYRO = "gyro"
 MAGNETOMETER = "magnetometer"
 DEVICEMOTION = "devicemotion"
+DIGITAL_SELFIE = "digital_selfie"
 REACHABILITY = "reachability"
 
 # dictionary for printing PROCESSED data streams for frontend
@@ -192,6 +193,7 @@ ALL_DATA_STREAMS = [ACCELEROMETER,
                     BLUETOOTH,
                     CALL_LOG,
                     DEVICEMOTION,
+                    DIGITAL_SELFIE,
                     GPS,
                     GYRO,
                     IDENTIFIERS,
@@ -215,6 +217,7 @@ UPLOAD_FILE_TYPE_MAPPING = {
     "bluetoothLog": BLUETOOTH,
     "callLog": CALL_LOG,
     "devicemotion": DEVICEMOTION,
+    "digital_selfie": DIGITAL_SELFIE,
     "gps": GPS,
     "gyro": GYRO,
     "logFile": ANDROID_LOG_FILE,
@@ -271,6 +274,8 @@ def data_stream_to_s3_file_name_string(data_type):
         return "magnetometer"
     if data_type == DEVICEMOTION:
         return "devicemotion"
+    if data_type == DIGITAL_SELFIE:
+        return "digital_selfie"
     if data_type == REACHABILITY:
         return "reachability"
     if data_type == IOS_LOG_FILE:
