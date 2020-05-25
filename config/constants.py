@@ -148,6 +148,7 @@ complete_data_stream_dict = {
     BLUETOOTH: "Bluetooth (bytes)",
     CALL_LOG: "Call Log (bytes)",
     DEVICEMOTION: "Device Motion (bytes)",
+    DIGITAL_SELFIE: "Digital Selfie",
     GPS: "GPS (bytes)",
     GYRO: "Gyro (bytes)",
     IDENTIFIERS: "Identifiers (bytes)",
