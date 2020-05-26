@@ -149,24 +149,24 @@ def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_c
             print(f"Day: {intra_date_fmt}")
 
             res = defaultdict(dict)
-            for k, type_str in INTRA_TIME_SERIES_TYPES.items():
+            for datastream, datastream_config in INTRA_TIME_SERIES_TYPES.items():
 
-                print(f"- fetching {k} intra-day time series")
+                print(f"- fetching {datastream} intra-day time series")
 
-                record = client.intraday_time_series(k, base_date=intra_date_fmt, detail_level='1min')
+                record = client.intraday_time_series(datastream, base_date=intra_date_fmt, detail_level=datastream_config['interval'])
 
-                k_db = k.replace('/', '_')
-                k_api = k.replace('/', '-')
-                data = record[f"{k_api}-intraday"]
+                datastream_db = datastream.replace('/', '_')
+                datastream_api = datastream.replace('/', '-')
+                data = record[f"{datastream_api}-intraday"]
                 for metric in data['dataset']:
 
                     threshold = 0.0
-                    if k == 'activities/calories':
+                    if datastream == 'activities/calories':
                         threshold = BMR.get(intra_date, 0.0)
 
                     if threshold > metric['value']:
                         metric_datetime = f"{intra_date} {metric['time']}"
-                        res[metric_datetime][k_db] = metric['value']
+                        res[metric_datetime][datastream_db] = metric['value']
 
             yield 'intra_time_series', res
 
@@ -228,13 +228,13 @@ def do_process_fitbit_records_lambda_handler(event, context):
                         has_yesterday = True
 
                     records += [
-                        FitbitRecord(user=user, last_updated=time, **fixed_info, **data)
+                            FitbitRecord(user=user, last_updated=time+' 00:00:00.000000+00:00', **fixed_info, **data)
                     ]
 
                 if has_yesterday:
-                    FitbitRecord.objects.filter(last_updated=yesterday_date).delete()
+                    FitbitRecord.objects.filter(last_updated=yesterday_date+' 00:00:00.000000+00:00').delete()
                 if has_today:
-                    FitbitRecord.objects.filter(last_updated=today_date).delete()
+                    FitbitRecord.objects.filter(last_updated=today_date+' 00:00:00.000000+00:00').delete()
 
                 FitbitRecord.objects.bulk_create(records)
 
@@ -250,13 +250,13 @@ def do_process_fitbit_records_lambda_handler(event, context):
                         has_yesterday = True
 
                     records += [
-                        FitbitIntradayRecord(user=user, last_updated=time, **data)
+                            FitbitIntradayRecord(user=user, last_updated=time+'+00:00', **data)
                     ]
 
                 if has_yesterday:
-                    FitbitIntradayRecord.objects.filter(last_updated__range=[yesterday_date, today_date]).delete()
+                    FitbitIntradayRecord.objects.filter(last_updated__range=[yesterday_date+' 00:00:00.000000+00:00', today_date+' 00:00:00.000000+00:00']).delete()
                 if has_today:
-                    FitbitIntradayRecord.objects.filter(last_updated__range=[today_date, tomorrow_date]).delete()
+                    FitbitIntradayRecord.objects.filter(last_updated__range=[today_date+' 00:00:00.000000+00:00', tomorrow_date+' 00:00:00.000000+00:00']).delete()
 
                 FitbitIntradayRecord.objects.bulk_create(records)
 
