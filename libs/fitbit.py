@@ -340,15 +340,15 @@ def authorize(code, state):
         traceback.print_exc()
         raise Exception('INTERNAL_ERROR')
 
-    try:
-        client = get_boto_client('lambda', pipeline_region)
-        client.invoke(
-            FunctionName=FITBIT_LAMBDA_ARN,
-            InvocationType='Event',
-            Payload=json.dumps({"credential": str(record.id)})
-        )
-    except:
-        traceback.print_exc()
+    #try:
+        #client = get_boto_client('lambda', pipeline_region)
+        #client.invoke(
+            #FunctionName=FITBIT_LAMBDA_ARN,
+            #InvocationType='Event',
+            #Payload=json.dumps({"credential": str(record.id)})
+        #)
+    #except:
+        #traceback.print_exc()
 
     try:
         create_fitbit_records_trigger(record)
