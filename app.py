@@ -103,7 +103,7 @@ app.register_blueprint(file_api.file_api, url_prefix='/api/v1/file')
 app.register_blueprint(gps_api.gps_api, url_prefix='/api/v1')
 
 # covid19 information
-app.register_blueprint(info_api.info_api, url_prefix='/info')
+app.register_blueprint(info_api.info_api, url_prefix='/api/v1/info')
 
 # selfie APIs
 app.register_blueprint(external_api.external_api, subdomain=BEIWE_SUBDOMAIN)

@@ -1,5 +1,4 @@
 from datetime import datetime
-
 import dateutil
 import iso3166
 import requests
@@ -32,8 +31,14 @@ def save_weather(country: str, zipcode):
         temperature = data['main']['temp']
         humidity = data['main']['humidity']
         updated_time = datetime.utcfromtimestamp(int(data['dt']))
-        Weather(last_updated=updated_time, country=country, zipcode=zipcode, weather=weather, temperature=temperature,
-                humidity=humidity).save()
+        Weather(
+            last_updated=updated_time,
+            country=country,
+            zipcode=zipcode,
+            weather=weather,
+            temperature=temperature,
+            humidity=humidity
+        ).save()
         return True
     except:
         return False
@@ -114,13 +119,29 @@ class Pollen(AbstractLocationInfo):
             return None
 
 
-class CovidCase(models.Model):
-    updated_time = models.DateTimeField()
-    country = models.CharField(max_length=25, choices=COVID_SUPPORTED_COUNTRIES)
-    country_confirmed = models.PositiveIntegerField()
-    country_recovered = models.PositiveIntegerField()
-    country_deaths = models.PositiveIntegerField()
-    region_data = JSONField()
+class AdministrativeLevel: 
+    COUNTRY = 0
+    STATE = 1
+    COUNTY = 2
+
+class AdministrativeDivision(models.Model):
+    parent = models.ForeignKey('self', null=True, on_delete=models.CASCADE)
+    administrative_level = models.PositiveIntegerField(choices=[
+        (AdministrativeLevel.COUNTRY, 'Country'),
+        (AdministrativeLevel.STATE, 'State'),
+        (AdministrativeLevel.COUNTY, 'County'),
+    ])
+    identifier = models.CharField(max_length=50)
+
+class CovidCases(models.Model):
+    division = models.ForeignKey(
+        'AdministrativeDivision',
+        on_delete=models.CASCADE,
+    )
+    date = models.DateTimeField()
+    confirmed = models.PositiveIntegerField()
+    deaths = models.PositiveIntegerField()
+    recovered = models.PositiveIntegerField()
 
     class Meta:
-        unique_together = ('updated_time', 'country',)
+        unique_together = ('division', 'date')

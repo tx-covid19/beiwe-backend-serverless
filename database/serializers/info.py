@@ -1,10 +1,10 @@
 from rest_framework import serializers
-from ..info_models import CovidCase, Weather, Pollen
+from ..info_models import CovidCases, Weather, Pollen
 
 
-class CovidCaseSerializer(serializers.ModelSerializer):
+class CovidCasesSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CovidCase
+        model = CovidCases
         fields = '__all__'
 
 
