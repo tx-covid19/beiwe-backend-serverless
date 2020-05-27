@@ -7,8 +7,9 @@ from datetime import datetime, date, timedelta
 import requests
 import traceback
 
+import boto3
 import fitbit
-from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
+from flask_jwt_extended import (create_access_token, decode_token)
 
 # noinspection PyUnresolvedReferences
 from config import load_django
@@ -23,8 +24,6 @@ from config.settings import (
 
 from database.fitbit_models import (FitbitInfo, FitbitRecord, FitbitIntradayRecord, FitbitCredentials)
 from database.user_models import Participant
-
-from pipeline.boto_helpers import get_boto_client
 
 
 pipeline_region = os.getenv("pipeline_region", None)
@@ -46,8 +45,9 @@ SCOPES = [
 ]
 
 def delete_fitbit_records_trigger(credential):
-    events_client = get_boto_client('events', pipeline_region)
-    lambda_client = get_boto_client('lambda', pipeline_region)
+    events_client = boto3.client('events', region_name=pipeline_region)
+    lambda_client = boto3.client('lambda', region_name=pipeline_region)
+
 
     rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
     permission_name = f"{rule_name}-event"
@@ -65,8 +65,8 @@ def delete_fitbit_records_trigger(credential):
     )
 
 def create_fitbit_records_trigger(credential):
-    events_client = get_boto_client('events', pipeline_region)
-    lambda_client = get_boto_client('lambda', pipeline_region)
+    events_client = boto3.client('events', region_name=pipeline_region)
+    lambda_client = boto3.client('lambda', region_name=pipeline_region)
 
     rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
     permission_name = f"{rule_name}-event"
