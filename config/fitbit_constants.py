@@ -3,9 +3,6 @@ TIME_SERIES_TYPES = {
     'activities/caloriesBMR': 'float',
     'activities/steps': '+int',
     'activities/distance': 'float',
-    # may not work in some devices
-    #    'activities/floors': '+int',
-    #    'activities/elevation': 'float',
     'activities/minutesSedentary': '+int',
     'activities/minutesLightlyActive': '+int',
     'activities/minutesFairlyActive': '+int',
