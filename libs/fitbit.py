@@ -11,7 +11,6 @@ import boto3
 import fitbit
 from flask_jwt_extended import (create_access_token, decode_token)
 
-# noinspection PyUnresolvedReferences
 from config import load_django
 from config.fitbit_constants import TIME_SERIES_TYPES, INTRA_TIME_SERIES_TYPES
 from config.settings import (
@@ -22,7 +21,12 @@ from config.settings import (
     IS_SERVERLESS
 )
 
-from database.fitbit_models import (FitbitInfo, FitbitRecord, FitbitIntradayRecord, FitbitCredentials)
+from database.fitbit_models import (
+    FitbitInfo,
+    FitbitRecord,
+    FitbitIntradayRecord,
+    FitbitCredentials
+)
 from database.user_models import Participant
 
 
@@ -44,10 +48,10 @@ SCOPES = [
     'weight'
 ]
 
+
 def delete_fitbit_records_trigger(credential):
     events_client = boto3.client('events', region_name=pipeline_region)
     lambda_client = boto3.client('lambda', region_name=pipeline_region)
-
 
     rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
     permission_name = f"{rule_name}-event"
@@ -63,6 +67,7 @@ def delete_fitbit_records_trigger(credential):
         FunctionName=FITBIT_LAMBDA_ARN,
         StatementId=permission_name,
     )
+
 
 def create_fitbit_records_trigger(credential):
     events_client = boto3.client('events', region_name=pipeline_region)
@@ -137,14 +142,13 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
             friends = []
         info_data['friends'] = friends
 
-
         leaderboard = fitbit_client.get_friends_leaderboard()
         if 'data' in leaderboard:
             leaderboard = leaderboard['data']
             for friend in leaderboard:
                 if 'relationships' in friend:
                     del friend['relationships']
-                    
+
                 if 'attributes' in friend:
                     attributes = friend['attributes']
                     friend.update(attributes)
@@ -175,7 +179,8 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
                     date = dp['dateOfSleep']
                     if date in fetched_dates:
                         continue
-                    res[date][data_stream] = res[date].get(data_stream, []) + [dp]
+                    res[date][data_stream] = \
+                        res[date].get(data_stream, []) + [dp]
                 else:
                     date = dp['dateTime']
                     if date in fetched_dates:
@@ -183,7 +188,8 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
                     res[date][data_stream.replace('/', '_')] = dp['value']
 
                 if data_stream == 'activities/caloriesBMR':
-                    BMR[date] = (float(dp['value']) / 24. / 60.) + 0.005 # corretion for daily spec
+                    minute_BMR = float(dp['value']) / 24. / 60.
+                    BMR[date] = minute_BMR + 0.005  # corretion for daily spec
 
         yield 'time_series', res
 
@@ -239,7 +245,9 @@ def do_process_fitbit_records_lambda_handler(event, context):
     refresh_token = credential.refresh_token
 
     initial_date = '2020-05-01'
-    yesterday_date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
+    yesterday_date = (
+        datetime.utcnow() - timedelta(days=1)
+    ).strftime('%Y-%m-%d')
 
     print(f"Fetching dates for participant {participant.patient_id}")
 
