@@ -4,8 +4,11 @@ from database.user_models import Participant
 from config.fitbit_constants import TIME_SERIES_TYPES, INTRA_TIME_SERIES_TYPES
 
 
-
 class FitbitCredentials(models.Model):
+    """
+    FitbitCredentials model is used to store Fitbit oAuth2 credentials, linked to a participant.
+    """
+
     participant = models.OneToOneField(Participant, on_delete=models.CASCADE)
     refresh_token = models.TextField()
     access_token = models.TextField()
@@ -22,6 +25,14 @@ class FitbitCredentials(models.Model):
 
 
 class FitbitInfo(models.Model):
+    """
+    FitbitInfo model is used to store data that has no history via Fitbit
+    API e.g. the linked devices of a user. For these data, it is not possible
+    to query the API for their past values. The values in this model represent
+    the state of the information at the given time `date`, in which the data
+    was queried. Considering this, it is important to notice that past information
+    may get lost if the rows are deleted.
+    """
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     date = models.DateTimeField()
 
@@ -31,6 +42,10 @@ class FitbitInfo(models.Model):
 
 
 class FitbitRecord(models.Model):
+    """
+    FitbitInfo model is used to store the daily aggregated data from Fitbit.
+    This information is present in the glanularity of a day.
+    """
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     date = models.DateTimeField()
 
@@ -48,6 +63,11 @@ for data_stream, data_stream_type in TIME_SERIES_TYPES.items():
 
 
 class FitbitIntradayRecord(models.Model):
+    """
+    FitbitIntradayRecord model is used to store the intra-daily aggregated
+    data from Fitbit. This information is present in the glanularity of a
+    minute or a second (for heart rate).
+    """
     participant = models.ForeignKey(Participant, on_delete=models.CASCADE)
     date = models.DateTimeField()
 
