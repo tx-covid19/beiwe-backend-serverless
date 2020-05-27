@@ -199,30 +199,26 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
                 print(f"Day: {intra_date_fmt}")
 
                 res = defaultdict(dict)
-                for data_stream, _ in INTRA_TIME_SERIES_TYPES.items():
-
-                    if 'activities/heart' != data_stream:
-                        continue
+                for data_stream, data_stream_config in INTRA_TIME_SERIES_TYPES.items():
 
                     print(f"- fetching {data_stream} intra-day time series")
 
                     record = fitbit_client.intraday_time_series(
                         data_stream,
                         base_date=intra_date_fmt,
-                        detail_level='1min'
+                        detail_level=data_stream_config['interval']
                     )
 
                     data_stream_db = data_stream.replace('/', '_')
                     data_stream_api = data_stream.replace('/', '-')
                     data = record[f"{data_stream_api}-intraday"]
-                    print(data)
                     for metric in data['dataset']:
 
                         threshold = 0.0
                         if data_stream == 'activities/calories':
                             threshold = BMR.get(intra_date, 0.0)
 
-                        if threshold > metric['value']:
+                        if metric['value'] > threshold:
                             metric_datetime = f"{intra_date} {metric['time']}"
                             res[metric_datetime][data_stream_db] = metric['value']
 
@@ -277,7 +273,8 @@ def do_process_fitbit_records_lambda_handler(event, context):
                     records += [
                         FitbitRecord(
                             participant=participant,
-                            date=time, **data
+                            date=time + ' 00:00:00+00:00',
+                            **data
                         )
                     ]
                 FitbitRecord.objects.bulk_create(records)
@@ -288,7 +285,7 @@ def do_process_fitbit_records_lambda_handler(event, context):
                     records += [
                         FitbitIntradayRecord(
                             participant=participant,
-                            date=time,
+                            date=time + '+00:00',
                             **data
                         )
                     ]
@@ -380,15 +377,15 @@ def authorize(code, state):
         traceback.print_exc()
         raise Exception('INTERNAL_ERROR')
 
-    try:
-        client = get_boto_client('lambda', pipeline_region)
-        client.invoke(
-            FunctionName=FITBIT_LAMBDA_ARN,
-            InvocationType='Event',
-            Payload=json.dumps({"credential": str(record.id)})
-        )
-    except:
-        traceback.print_exc()
+    # try:
+    #     client = get_boto_client('lambda', pipeline_region)
+    #     client.invoke(
+    #         FunctionName=FITBIT_LAMBDA_ARN,
+    #         InvocationType='Event',
+    #         Payload=json.dumps({"credential": str(record.id)})
+    #     )
+    # except:
+    #     traceback.print_exc()
 
     try:
         create_fitbit_records_trigger(record)
