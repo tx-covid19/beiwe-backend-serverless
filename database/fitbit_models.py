@@ -80,8 +80,9 @@ class FitbitIntradayRecord(models.Model):
         unique_together = ('participant', 'date',)
 
 
-for data_stream, data_stream_type in INTRA_TIME_SERIES_TYPES.items():
+for data_stream, data_stream_config in INTRA_TIME_SERIES_TYPES.items():
     data_stream = data_stream.replace('/', '_')
+    data_stream_type = data_stream_config['type']
     if data_stream_type == '+int':
         FitbitIntradayRecord.add_to_class(
             data_stream, models.PositiveIntegerField(blank=True, null=True))
