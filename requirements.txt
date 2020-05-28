@@ -41,4 +41,4 @@ flask-cors
 # fitbit
 git+https://github.com/anibalsolon/python-fitbit.git@feature/friends_api_update#egg=fitbit
 
-
+validate_email
