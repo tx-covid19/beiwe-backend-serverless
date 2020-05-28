@@ -11,8 +11,10 @@ services:
         (python manage.py create_default_participant || true) &&
         python app.py
       "
+    restart: on-failure
     volumes:
       - .:/code
+      - /code/database/migrations
     ports:
       - 8080:8080
     env_file:
