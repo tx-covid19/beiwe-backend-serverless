@@ -55,13 +55,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.action == 'list':
-
         print(f"Participant patient_ids with Fitbit integration:")
-
-        print(FitbitCredentials.objects.all().values('participant').values('participant'))
+        for participant in FitbitCredentials.objects.all().values('participant').values('participant'):
+            print('- ' + Participant.objects.get(pk=participant['participant']).patient_id)
 
         sys.exit(0)
-
 
 
     if args.participant_id and args.patient_id:
