@@ -18,7 +18,8 @@ from database.fitbit_models import (
 from libs.fitbit import (
     create_fitbit_records_trigger,
     delete_fitbit_records_trigger,
-    do_process_fitbit_records_lambda_handler
+    do_process_fitbit_records_lambda_handler,
+    trigger_process_fitbit_records
 )
 
 def confirm(message):
@@ -83,6 +84,12 @@ if __name__ == "__main__":
             event={"credential": credential.id},
             context=None
         )
+
+    elif args.action == 'sync_lambda':
+
+        print(f"Invoking Fitbit lambda for '{participant.patient_id}'...")
+
+        trigger_process_fitbit_records(credential)
 
     elif args.action == 'delete_credential':
         if confirm(f"Do you confirm you want to delete the Fitbit credential for '{participant.patient_id}'?"):

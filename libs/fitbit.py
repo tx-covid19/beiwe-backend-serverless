@@ -328,6 +328,18 @@ def do_process_fitbit_records_lambda_handler(event, context):
         }
 
 
+def trigger_process_fitbit_records(credential):
+    try:
+        lambda_client = boto3.client('lambda', region_name=pipeline_region)
+        lambda_client.invoke(
+            FunctionName=FITBIT_LAMBDA_ARN,
+            InvocationType='Event',
+            Payload=json.dumps({"credential": str(credential.id)})
+        )
+    except:
+        traceback.print_exc()
+
+
 def recreate_fitbit_records_trigger():
     for credential in FitbitCredentials.objects.all():
         create_fitbit_records_trigger(credential)
@@ -399,16 +411,6 @@ def authorize(code, state):
     except Exception as e:
         traceback.print_exc()
         raise Exception('INTERNAL_ERROR')
-
-    # try:
-    #     client = get_boto_client('lambda', pipeline_region)
-    #     client.invoke(
-    #         FunctionName=FITBIT_LAMBDA_ARN,
-    #         InvocationType='Event',
-    #         Payload=json.dumps({"credential": str(record.id)})
-    #     )
-    # except:
-    #     traceback.print_exc()
 
     try:
         create_fitbit_records_trigger(record)
