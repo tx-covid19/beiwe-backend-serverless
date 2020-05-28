@@ -4,6 +4,7 @@ import json
 import base64
 from collections import defaultdict
 from datetime import datetime, date, timedelta
+from pytz import timezone
 import requests
 import traceback
 
@@ -117,6 +118,11 @@ def get_fitbit_client(credential, update_cb=None):
     )
 
 
+def get_fitbit_profile(credential, update_cb=None):
+    fitbit_client = get_fitbit_client(credential, update_cb)
+    return fitbit_client.user_profile_get()['user']
+
+
 def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_dates=[], info=True, interday=True, intraday=True):
 
     fitbit_client = get_fitbit_client(credential, update_cb)
@@ -166,7 +172,8 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
 
         res = defaultdict(dict)
         for data_stream, _ in TIME_SERIES_TYPES.items():
-            print(f"Fetching {data_stream} time series")
+            print(f"Fetching {data_stream} time series:", end=' ')
+            found_days = 0
 
             record = fitbit_client.time_series(
                 data_stream,
@@ -179,17 +186,21 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
                     date = dp['dateOfSleep']
                     if date in fetched_dates:
                         continue
+                    found_days += 1
                     res[date][data_stream] = \
                         res[date].get(data_stream, []) + [dp]
                 else:
                     date = dp['dateTime']
                     if date in fetched_dates:
                         continue
+                    found_days += 1
                     res[date][data_stream.replace('/', '_')] = dp['value']
 
                 if data_stream == 'activities/caloriesBMR':
                     minute_BMR = float(dp['value']) / 24. / 60.
                     BMR[date] = minute_BMR + 0.005  # corretion for daily spec
+
+            print(f'{found_days} days')
 
         yield 'time_series', res
 
@@ -202,17 +213,20 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
             intra_date_fmt = intra_date.strftime("%Y-%m-%d")
 
             if intra_date_fmt not in fetched_dates:
-                print(f"Day: {intra_date_fmt}")
+                print(f"Day {intra_date_fmt}:")
 
                 res = defaultdict(dict)
                 for data_stream, data_stream_config in INTRA_TIME_SERIES_TYPES.items():
 
-                    print(f"- fetching {data_stream} intra-day time series")
+                    interval = data_stream_config['interval']
+
+                    print(f"- fetching {data_stream} intra-day time series:", end=' ')
+                    found_data = 0
 
                     record = fitbit_client.intraday_time_series(
                         data_stream,
                         base_date=intra_date_fmt,
-                        detail_level=data_stream_config['interval']
+                        detail_level=interval
                     )
 
                     data_stream_db = data_stream.replace('/', '_')
@@ -222,11 +236,14 @@ def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_d
 
                         threshold = 0.0
                         if data_stream == 'activities/calories':
-                            threshold = BMR.get(intra_date, 0.0)
+                            threshold = BMR.get(intra_date_fmt, 0.0)
 
                         if metric['value'] > threshold:
                             metric_datetime = f"{intra_date} {metric['time']}"
                             res[metric_datetime][data_stream_db] = metric['value']
+                            found_data += 1
+
+                    print(f'{found_days} {interval[1:]}')
 
                 yield 'intra_time_series', res
 
@@ -240,27 +257,25 @@ def do_process_fitbit_records_lambda_handler(event, context):
     credential_id = event['credential']
     credential = FitbitCredentials.objects.get(pk=credential_id)
 
-    participant = credential.participant
-    access_token = credential.access_token
-    refresh_token = credential.refresh_token
-
-    initial_date = '2020-05-01'
-    yesterday_date = (
-        datetime.utcnow() - timedelta(days=1)
-    ).strftime('%Y-%m-%d')
-
-    print(f"Fetching dates for participant {participant.patient_id}")
-
-    fetched_dates = set([
-        record['date'].strftime('%Y-%m-%d')
-        for record in FitbitRecord.objects.filter(participant=participant).values('date').values('date')
-    ])
-
     def update_token(token_dict):
         print("Updating token")
         credential.access_token = token_dict['access_token']
         credential.refresh_token = token_dict['refresh_token']
         credential.save()
+
+    participant = credential.participant
+    profile = get_fitbit_profile(credential)
+
+    initial_date = '2020-05-01'
+    yesterday_date = (
+        datetime.now(timezone(profile['timezone'])) - timedelta(days=1)
+    ).strftime('%Y-%m-%d')
+
+    print(f"Fetching dates for participant {participant.patient_id} from {initial_date} to {yesterday_date}")
+    fetched_dates = set([
+        record['date'].strftime('%Y-%m-%d')
+        for record in FitbitRecord.objects.filter(participant=participant).values('date').values('date')
+    ])
 
     try:
         for resource_type, resource in get_fitbit_record(
