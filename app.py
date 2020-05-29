@@ -71,8 +71,9 @@ def subdomain(directory):
 print(f'Configuring {DOMAIN_NAME} with {BEIWE_SUBDOMAIN}, {DIGITAL_SELFIE_SUBDOMAIN}, {FITBIT_SUBDOMAIN}, static loaded from {CDN_DOMAIN}')
 
 app = subdomain("frontend")
-app.config['SERVER_NAME'] = BEIWE_ROOT_DOMAIN
-app.config['CDN_DOMAIN'] = CDN_DOMAIN
+if DOMAIN_NAME != 'localhost':
+    app.config['SERVER_NAME'] = BEIWE_ROOT_DOMAIN
+    app.config['CDN_DOMAIN'] = CDN_DOMAIN
 
 app.jinja_env.globals['current_year'] = datetime.now().strftime('%Y')
 
