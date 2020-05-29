@@ -55,8 +55,7 @@ def refresh_data():
             for d in CovidCases.objects.filter(date=report_date).values('division').values('division')
         ])
 
-        cases = []
-        hits = {}
+        cases = {}
             
         date_headers = [header for header in headers if header.count('-') == 2]
         for row in csv_iter:
@@ -97,19 +96,16 @@ def refresh_data():
             if counties[(state, county)].id in inserted_data:
                 continue
 
-            hits[(state, county)] = hits.get((state, county), 0) + 1
+            cases[(state, county)] = CovidCases(
+                division=counties[(state, county)],
+                date=report_date,
+                confirmed=confirmed,
+                deaths=deaths,
+                recovered=recovered,
+            )
+            
 
-            cases += [
-                CovidCases(
-                    division=counties[(state, county)],
-                    date=report_date,
-                    confirmed=confirmed,
-                    deaths=deaths,
-                    recovered=recovered,
-                )
-            ]
-
-        CovidCases.objects.bulk_create(cases)
+        CovidCases.objects.bulk_create(list(cases.values()))
 
         for state, count in states_counts.items():
 
