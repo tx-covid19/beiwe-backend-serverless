@@ -26,7 +26,10 @@ def tracker_handler():
             return jsonify({'msg': 'User not found.'}), 404
         serializer = TrackerRecordSerializer(data=request.json)
         if serializer.is_valid():
-            record = TrackRecord(user=user, **request.json)
-            record.save()
+            try:
+                record = TrackRecord(user=user, **request.json)
+                record.save()
+            except:
+                return jsonify(serializer.data), 200
             return jsonify(serializer.data), 201
         return jsonify({'msg': serializer.errors}), 400

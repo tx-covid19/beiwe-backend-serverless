@@ -2,8 +2,8 @@
 Django==1.11.28
 Flask>=1.1.1
 
-pycrypto
 #pycryptodome>=3.9.0
+pycrypto
 
 # error reporting
 raven[flask]>=6.8.0
@@ -40,3 +40,5 @@ flask-cors
 
 # fitbit
 git+https://github.com/anibalsolon/python-fitbit.git@feature/friends_api_update#egg=fitbit
+
+validate_email
