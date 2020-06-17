@@ -90,7 +90,7 @@ def view_study(study_id=None):
     audio_survey_ids = study.get_survey_ids_and_object_ids_for_study('audio_survey')
     image_survey_ids = study.get_survey_ids_and_object_ids_for_study('image_survey')
     participants = study.participants.all()
-    fitbit_registrations = FitbitCredentials.objects.all().values_list('user_id', flat=True)
+    fitbit_registrations = FitbitCredentials.objects.all().values_list('participant_id', flat=True)
 
     study_fields = list(study.fields.all().values_list('field_name', flat=True))
     study_fields.append('Fitbit')

@@ -11,7 +11,7 @@ from config import load_django
 
 from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api, external_api,
                  mobile_api, participant_administration, survey_api, redcap_api, survey_api,
-                 participant_auth, event_api, overview_api, tracker_api, refresh_api, fitbit_api)
+                 participant_auth, event_api, overview_api, tracker_api, refresh_api)
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN, DOMAIN_NAME, BEIWE_SUBDOMAIN, DIGITAL_SELFIE_SUBDOMAIN, FITBIT_SUBDOMAIN, BEIWE_ROOT_DOMAIN, CDN_DOMAIN
 from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
