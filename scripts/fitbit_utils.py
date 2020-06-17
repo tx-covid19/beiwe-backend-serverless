@@ -65,7 +65,10 @@ if __name__ == "__main__":
 
     elif args.action == 'recreate_trigger_all':
         for credential in FitbitCredentials.objects.all():
+            print(f"Recreating credential {credential.id}")
             create_fitbit_records_trigger(credential)
+
+        sys.exit(0)
 
     if args.participant_id and args.patient_id:
         print("Please provide just one of them: participant_id or patient_id")
