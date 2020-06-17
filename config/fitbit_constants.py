@@ -3,9 +3,6 @@ TIME_SERIES_TYPES = {
     'activities/caloriesBMR': 'float',
     'activities/steps': '+int',
     'activities/distance': 'float',
-    # may not work in some devices
-    #    'activities/floors': '+int',
-    #    'activities/elevation': 'float',
     'activities/minutesSedentary': '+int',
     'activities/minutesLightlyActive': '+int',
     'activities/minutesFairlyActive': '+int',
@@ -21,8 +18,8 @@ TIME_SERIES_TYPES = {
 }
 
 INTRA_TIME_SERIES_TYPES = {
-    'activities/calories': {'type':'float', 'interval':'1min'},
-    'activities/steps': {'type':'+int', 'interval':'1min'},
-    'activities/distance': {'type':'float', 'interval':'1min'},
-    'activities/heart': {'type':'float', 'interval':'1sec'},
+    'activities/calories': {'type': 'float', 'interval': '1min'},
+    'activities/steps': {'type': '+int', 'interval': '1min'},
+    'activities/distance': {'type': 'float', 'interval': '1min'},
+    'activities/heart': {'type': 'float', 'interval': '1sec'},
 }

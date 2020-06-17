@@ -4,13 +4,14 @@ import json
 import base64
 from collections import defaultdict
 from datetime import datetime, date, timedelta
+from pytz import timezone
 import requests
 import traceback
 
+import boto3
 import fitbit
-from flask_jwt_extended import (create_access_token, decode_token, jwt_required)
+from flask_jwt_extended import (create_access_token, decode_token)
 
-# noinspection PyUnresolvedReferences
 from config import load_django
 from config.fitbit_constants import TIME_SERIES_TYPES, INTRA_TIME_SERIES_TYPES
 from config.settings import (
@@ -21,10 +22,13 @@ from config.settings import (
     IS_SERVERLESS
 )
 
-from database.fitbit_models import (FitbitRecord, FitbitIntradayRecord, FitbitCredentials)
+from database.fitbit_models import (
+    FitbitInfo,
+    FitbitRecord,
+    FitbitIntradayRecord,
+    FitbitCredentials
+)
 from database.user_models import Participant
-
-from pipeline.boto_helpers import get_boto_client
 
 
 pipeline_region = os.getenv("pipeline_region", None)
@@ -45,31 +49,42 @@ SCOPES = [
     'weight'
 ]
 
+
+def delete_fitbit_records_trigger(credential):
+    events_client = boto3.client('events', region_name=pipeline_region)
+    lambda_client = boto3.client('lambda', region_name=pipeline_region)
+
+    rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
+    permission_name = f"{rule_name}-event"
+
+    events_client.describe_rule(Name=rule_name)
+    targets = events_client.list_targets_by_rule(Rule=rule_name)
+    events_client.remove_targets(
+        Rule=rule_name,
+        Ids=[target['Id'] for target in targets['Targets']],
+    )
+    events_client.delete_rule(Name=rule_name)
+    lambda_client.remove_permission(
+        FunctionName=FITBIT_LAMBDA_ARN,
+        StatementId=permission_name,
+    )
+
+
 def create_fitbit_records_trigger(credential):
-    events_client = get_boto_client('events', pipeline_region)
-    lambda_client = get_boto_client('lambda', pipeline_region)
+    events_client = boto3.client('events', region_name=pipeline_region)
+    lambda_client = boto3.client('lambda', region_name=pipeline_region)
 
     rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
     permission_name = f"{rule_name}-event"
 
     try:
-        events_client.describe_rule(Name=rule_name)
-        targets = events_client.list_targets_by_rule(Rule=rule_name)
-        events_client.remove_targets(
-            Rule=rule_name,
-            Ids=[target['Id'] for target in targets['Targets']],
-        )
-        events_client.delete_rule(Name=rule_name)
-        lambda_client.remove_permission(
-            FunctionName=FITBIT_LAMBDA_ARN,
-            StatementId=permission_name,
-        )
+        delete_fitbit_records_trigger(credential)
     except Exception as e:
         pass
 
     rule = events_client.put_rule(
         Name=rule_name,
-        ScheduleExpression='rate(4 hours)',
+        ScheduleExpression='cron(0 1 * * ? *)',
         State='ENABLED'
     )
 
@@ -93,84 +108,146 @@ def create_fitbit_records_trigger(credential):
     )
 
 
-def get_fitbit_client(access_token, refresh_token, update_cb=None):
+def get_fitbit_client(credential, update_cb=None):
     return fitbit.Fitbit(
         FITBIT_CLIENT_ID,
         FITBIT_CLIENT_SECRET,
-        access_token=access_token,
-        refresh_token=refresh_token,
+        access_token=credential.access_token,
+        refresh_token=credential.refresh_token,
         refresh_cb=update_cb
     )
 
 
-def get_fitbit_record(access_token, refresh_token, base_date, end_date, update_cb, fetched_dates):
-    res = {}
+def get_fitbit_profile(credential, update_cb=None):
+    fitbit_client = get_fitbit_client(credential, update_cb)
+    return fitbit_client.user_profile_get()['user']
 
-    client = fitbit.Fitbit(
-        FITBIT_CLIENT_ID,
-        FITBIT_CLIENT_SECRET,
-        access_token=access_token,
-        refresh_token=refresh_token,
-        refresh_cb=update_cb
-    )
 
-    print(f"Fetching singular data")
-    yield 'devices', client.get_devices()
-    yield 'friends', client.get_friends()
-    yield 'friends_leaderboard', client.get_friends_leaderboard()
+def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_dates=[], info=True, interday=True, intraday=True):
+
+    fitbit_client = get_fitbit_client(credential, update_cb)
+
+    if info:
+        print(f"Fetching singular data")
+
+        info_data = {}
+
+        info_data['devices'] = fitbit_client.get_devices()
+
+        friends = fitbit_client.get_friends()
+        if 'data' in friends:
+            friends = friends['data']
+            for friend in friends:
+                if 'attributes' in friend:
+                    attributes = friend['attributes']
+                    if 'avatar' in attributes:
+                        del friend['attributes']['avatar']
+                    friend.update(attributes)
+                    del friend['attributes']
+        else:
+            friends = []
+        info_data['friends'] = friends
+
+        leaderboard = fitbit_client.get_friends_leaderboard()
+        if 'data' in leaderboard:
+            leaderboard = leaderboard['data']
+            for friend in leaderboard:
+                if 'relationships' in friend:
+                    del friend['relationships']
+
+                if 'attributes' in friend:
+                    attributes = friend['attributes']
+                    friend.update(attributes)
+                    del friend['attributes']
+        else:
+            leaderboard = []
+        info_data['friends_leaderboard'] = leaderboard
+
+        yield 'info', info_data
+        del info_data
 
     BMR = {}
 
-    res = defaultdict(dict)
-    for k, type_str in TIME_SERIES_TYPES.items():
-        print(f"Fetching {k} time series")
+    if interday:
 
-        record = client.time_series(k, base_date=base_date, end_date=end_date)
-        data = record[k.replace('/', '-')]
-        for dp in data:
-            date = dp['dateTime']
-            if date in fetched_dates:
-                continue
-            res[date][k.replace('/', '_')] = dp['value']
+        res = defaultdict(dict)
+        for data_stream, _ in TIME_SERIES_TYPES.items():
+            print(f"Fetching {data_stream} time series:", end=' ')
+            found_days = 0
 
-            if k == 'activities/caloriesBMR':
-                BMR[date] = (float(dp['value']) / 24. / 60.) + 0.005 # corretion for daily spec
+            record = fitbit_client.time_series(
+                data_stream,
+                base_date=base_date,
+                end_date=end_date
+            )
+            data = record[data_stream.replace('/', '-')]
+            for dp in data:
+                if data_stream == 'sleep':
+                    date = dp['dateOfSleep']
+                    if date in fetched_dates:
+                        continue
+                    found_days += 1
+                    res[date][data_stream] = \
+                        res[date].get(data_stream, []) + [dp]
+                else:
+                    date = dp['dateTime']
+                    if date in fetched_dates:
+                        continue
+                    found_days += 1
+                    res[date][data_stream.replace('/', '_')] = dp['value']
 
-    yield 'time_series', res
+                if data_stream == 'activities/caloriesBMR':
+                    minute_BMR = float(dp['value']) / 24. / 60.
+                    BMR[date] = minute_BMR + 0.005  # corretion for daily spec
 
+            print(f'{found_days} days')
 
-    delta = timedelta(days=1)
-    intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
-    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-    while intra_date <= end_date:
-        intra_date_fmt = intra_date.strftime("%Y-%m-%d")
+        yield 'time_series', res
 
-        if intra_date_fmt not in fetched_dates:
-            print(f"Day: {intra_date_fmt}")
+    if intraday:
 
-            res = defaultdict(dict)
-            for datastream, datastream_config in INTRA_TIME_SERIES_TYPES.items():
+        delta = timedelta(days=1)
+        intra_date = datetime.strptime(base_date, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        while intra_date <= end_date:
+            intra_date_fmt = intra_date.strftime("%Y-%m-%d")
 
-                print(f"- fetching {datastream} intra-day time series")
+            if intra_date_fmt not in fetched_dates:
+                print(f"Day {intra_date_fmt}:")
 
-                record = client.intraday_time_series(datastream, base_date=intra_date_fmt, detail_level=datastream_config['interval'])
+                res = defaultdict(dict)
+                for data_stream, data_stream_config in INTRA_TIME_SERIES_TYPES.items():
 
-                datastream_db = datastream.replace('/', '_')
-                datastream_api = datastream.replace('/', '-')
-                data = record[f"{datastream_api}-intraday"]
-                for metric in data['dataset']:
+                    interval = data_stream_config['interval']
 
-                    threshold = 0.0
-                    if datastream == 'activities/calories':
-                        threshold = BMR.get(intra_date, 0.0)
+                    print(f"- fetching {data_stream} intra-day time series:", end=' ')
+                    found_data = 0
 
-                    if threshold > metric['value']:
-                        metric_datetime = f"{intra_date} {metric['time']}"
-                        res[metric_datetime][datastream_db] = metric['value']
+                    record = fitbit_client.intraday_time_series(
+                        data_stream,
+                        base_date=intra_date_fmt,
+                        detail_level=interval
+                    )
 
-            yield 'intra_time_series', res
+                    data_stream_db = data_stream.replace('/', '_')
+                    data_stream_api = data_stream.replace('/', '-')
+                    data = record[f"{data_stream_api}-intraday"]
+                    for metric in data['dataset']:
 
-        intra_date += delta
+                        threshold = 0.0
+                        if data_stream == 'activities/calories':
+                            threshold = BMR.get(intra_date_fmt, 0.0)
+
+                        if metric['value'] > threshold:
+                            metric_datetime = f"{intra_date} {metric['time']}"
+                            res[metric_datetime][data_stream_db] = metric['value']
+                            found_data += 1
+
+                    print(f'{found_days} {interval[1:]}')
+
+                yield 'intra_time_series', res
+
+            intra_date += delta
 
 
 def do_process_fitbit_records_lambda_handler(event, context):
@@ -180,84 +257,61 @@ def do_process_fitbit_records_lambda_handler(event, context):
     credential_id = event['credential']
     credential = FitbitCredentials.objects.get(pk=credential_id)
 
-    user = credential.user
-    access_token = credential.access_token
-    refresh_token = credential.refresh_token
-
-    initial_date = '2020-05-01'
-    yesterday_date = (datetime.utcnow() - timedelta(days=1)).strftime('%Y-%m-%d')
-    today_date = datetime.utcnow().strftime('%Y-%m-%d')
-    tomorrow_date = (datetime.utcnow() + timedelta(days=1)).strftime('%Y-%m-%d')
-
-    print(f"Fetching dates for user {user.patient_id}")
-
-    fetched_dates = set([
-        d['last_updated'].strftime('%Y-%m-%d')
-        for d in FitbitRecord.objects.filter(user=user).values('last_updated').values('last_updated')
-    ])
-
-    fetched_dates -= set([yesterday_date, today_date])
-
     def update_token(token_dict):
         print("Updating token")
         credential.access_token = token_dict['access_token']
         credential.refresh_token = token_dict['refresh_token']
         credential.save()
 
-    fixed_info = {}
+    participant = credential.participant
+    profile = get_fitbit_profile(credential)
+
+    initial_date = '2020-05-01'
+    yesterday_date = (
+        datetime.now(timezone(profile['timezone'])) - timedelta(days=1)
+    ).strftime('%Y-%m-%d')
+
+    print(f"Fetching dates for participant {participant.patient_id} from {initial_date} to {yesterday_date}")
+    fetched_dates = set([
+        record['date'].strftime('%Y-%m-%d')
+        for record in FitbitRecord.objects.filter(participant=participant).values('date').values('date')
+    ])
 
     try:
-        # There is a max time range
-        for restype, res in get_fitbit_record(
-            access_token, refresh_token,
-            initial_date, today_date,
-            update_token, fetched_dates
+        for resource_type, resource in get_fitbit_record(
+            credential,
+            initial_date, yesterday_date,
+            update_token, fetched_dates,
         ):
-            if restype in ['devices', 'friends', 'friends_leaderboard']:
-                fixed_info[restype] = res
+            if resource_type == 'info':
+                FitbitInfo(
+                    participant=participant,
+                    date=datetime.utcnow(),
+                    **resource
+                ).save()
 
-            if restype == 'time_series':
+            if resource_type == 'time_series':
                 records = []
-                has_yesterday = False
-                has_today = False
-                for time, data in res.items():
-
-                    if time == today_date:
-                        has_today = True
-                    if time == yesterday_date:
-                        has_yesterday = True
-
+                for time, data in resource.items():
                     records += [
-                            FitbitRecord(user=user, last_updated=time+' 00:00:00.000000+00:00', **fixed_info, **data)
+                        FitbitRecord(
+                            participant=participant,
+                            date=time + ' 00:00:00+00:00',
+                            **data
+                        )
                     ]
-
-                if has_yesterday:
-                    FitbitRecord.objects.filter(last_updated=yesterday_date+' 00:00:00.000000+00:00').delete()
-                if has_today:
-                    FitbitRecord.objects.filter(last_updated=today_date+' 00:00:00.000000+00:00').delete()
-
                 FitbitRecord.objects.bulk_create(records)
 
-            if restype == 'intra_time_series':
+            if resource_type == 'intra_time_series':
                 records = []
-                has_yesterday = False
-                has_today = False
-                for time, data in res.items():
-
-                    if time[0:10] == today_date:
-                        has_today = True
-                    if time[0:10] == yesterday_date:
-                        has_yesterday = True
-
+                for time, data in resource.items():
                     records += [
-                            FitbitIntradayRecord(user=user, last_updated=time+'+00:00', **data)
+                        FitbitIntradayRecord(
+                            participant=participant,
+                            date=time + '+00:00',
+                            **data
+                        )
                     ]
-
-                if has_yesterday:
-                    FitbitIntradayRecord.objects.filter(last_updated__range=[yesterday_date+' 00:00:00.000000+00:00', today_date+' 00:00:00.000000+00:00']).delete()
-                if has_today:
-                    FitbitIntradayRecord.objects.filter(last_updated__range=[today_date+' 00:00:00.000000+00:00', tomorrow_date+' 00:00:00.000000+00:00']).delete()
-
                 FitbitIntradayRecord.objects.bulk_create(records)
 
     except Exception as e:
@@ -272,6 +326,18 @@ def do_process_fitbit_records_lambda_handler(event, context):
             'statusCode': 200,
             'body': 'Lambda finished!'
         }
+
+
+def trigger_process_fitbit_records(credential):
+    try:
+        lambda_client = boto3.client('lambda', region_name=pipeline_region)
+        lambda_client.invoke(
+            FunctionName=FITBIT_LAMBDA_ARN,
+            InvocationType='Event',
+            Payload=json.dumps({"credential": str(credential.id)})
+        )
+    except:
+        traceback.print_exc()
 
 
 def recreate_fitbit_records_trigger():
@@ -327,28 +393,24 @@ def authorize(code, state):
         access_token = resp['access_token']
         refresh_token = resp['refresh_token']
 
-        records = FitbitCredentials.objects.filter(user__patient_id__exact=patient_id)
+        records = FitbitCredentials.objects.filter(
+            participant__patient_id__exact=patient_id
+        )
         if records.exists():
-            record: FitbitCredentials = records.get()
+            record = records.get()
             record.access_token = access_token
             record.refresh_token = refresh_token
             record.save()
         else:
-            record = FitbitCredentials(access_token=access_token, refresh_token=refresh_token, user=participant)
+            record = FitbitCredentials(
+                access_token=access_token,
+                refresh_token=refresh_token,
+                participant=participant
+            )
             record.save()
     except Exception as e:
         traceback.print_exc()
         raise Exception('INTERNAL_ERROR')
-
-    #try:
-        #client = get_boto_client('lambda', pipeline_region)
-        #client.invoke(
-            #FunctionName=FITBIT_LAMBDA_ARN,
-            #InvocationType='Event',
-            #Payload=json.dumps({"credential": str(record.id)})
-        #)
-    #except:
-        #traceback.print_exc()
 
     try:
         create_fitbit_records_trigger(record)
