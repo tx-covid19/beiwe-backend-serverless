@@ -50,6 +50,7 @@ if __name__ == "__main__":
         'delete_credential',
         'wipe_credential',
         'recreate_trigger',
+        'recreate_trigger_all',
         'delete_trigger'
     ])
 
