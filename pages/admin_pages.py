@@ -3,6 +3,7 @@ from flask import abort, Blueprint, flash, Markup, redirect, render_template, re
 from database.study_models import Study, StudyField
 from database.user_models import Participant, ParticipantFieldValue, Researcher, ParticipantAliases
 from database.pipeline_models import PipelineExecutionTracking
+from database.fitbit_models import FitbitCredentials
 from libs import admin_authentication
 from libs.admin_authentication import (authenticate_researcher_login,
     authenticate_researcher_study_access, get_researcher_allowed_studies,
@@ -89,10 +90,16 @@ def view_study(study_id=None):
     audio_survey_ids = study.get_survey_ids_and_object_ids_for_study('audio_survey')
     image_survey_ids = study.get_survey_ids_and_object_ids_for_study('image_survey')
     participants = study.participants.all()
+    fitbit_registrations = FitbitCredentials.objects.all().values_list('user_id', flat=True)
 
     study_fields = list(study.fields.all().values_list('field_name', flat=True))
+    study_fields.append('Fitbit')
     for p in participants:
         p.values_dict = {tag.field.field_name: tag.value for tag in p.field_values.all()}
+        if p.id in fitbit_registrations:
+            p.values_dict['Fitbit'] = 'Registered'
+        else:
+            p.values_dict['Fitbit'] = 'Not Registered'
 
     aliases = ParticipantAliases.objects.filter(study_id=study_id)
 
