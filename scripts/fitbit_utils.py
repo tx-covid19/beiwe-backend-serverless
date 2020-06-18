@@ -54,6 +54,7 @@ if __name__ == "__main__":
     parser.add_argument('action', type=str, choices=[
         'list',
         'sync',
+        'sync_lambda',
         'delete_credential',
         'wipe_credential_data',
         'wipe_credential_data_all',
