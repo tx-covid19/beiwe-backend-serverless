@@ -62,19 +62,25 @@ def delete_fitbit_records_all_triggers():
     ]
     for rule_name in rules_to_delete:
         events_client.describe_rule(Name=rule_name)
-        targets = events_client.list_targets_by_rule(Rule=rule_name)
-        events_client.remove_targets(
-            Rule=rule_name,
-            Ids=[target['Id'] for target in targets['Targets']],
-        )
+        targets = events_client.list_targets_by_rule(Rule=rule_name)['Targets']
+        if targets:
+            events_client.remove_targets(
+                Rule=rule_name,
+                Ids=[target['Id'] for target in targets],
+            )
+        events_client.delete_rule(Name=rule_name)
 
-    policy = json.loads(lambda_client.get_policy(FunctionName=FITBIT_LAMBDA_ARN)['Policy'])
-    permissions_to_delete = [p['Sid'] for p in policy['Statement']]
-    for permission_name in permissions_to_delete:
-        lambda_client.remove_permission(
-            FunctionName=FITBIT_LAMBDA_ARN,
-            StatementId=permission_name,
-        )
+    try:
+        policy = json.loads(lambda_client.get_policy(FunctionName=FITBIT_LAMBDA_ARN)['Policy'])
+        permissions_to_delete = [p['Sid'] for p in policy['Statement']]
+        for permission_name in permissions_to_delete:
+            lambda_client.remove_permission(
+                FunctionName=FITBIT_LAMBDA_ARN,
+                StatementId=permission_name,
+            )
+    except:
+        pass
+
 
 def delete_fitbit_records_trigger(credential_id):
     events_client = boto3.client('events', region_name=pipeline_region)
