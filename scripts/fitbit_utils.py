@@ -64,8 +64,9 @@ if __name__ == "__main__":
 
     if args.action == 'list':
         print(f"Participant patient_ids with Fitbit integration:")
-        for participant in FitbitCredentials.objects.all().values('participant').values('participant'):
-            print('- ' + Participant.objects.get(pk=participant['participant']).patient_id)
+        for credential in FitbitCredentials.objects.all():
+            participant = credential.participant
+            print(f'- Participant {participant.id} ({participant.patient_id}): Credential {credential.id}')
 
         sys.exit(0)
 
