@@ -80,6 +80,22 @@ if __name__ == "__main__":
 
         sys.exit(0)
 
+    elif args.action == 'wipe_credential_data_all':
+        if confirm(f"Do you confirm you want to wipe the Fitbit data for all participants? "
+                    "It will erase all the recorded data, except the credential."):
+
+            FitbitInfo.objects.all().delete()
+            FitbitRecord.objects.all().delete()
+            FitbitIntradayRecord.objects.all().delete()
+
+        sys.exit(0)
+
+    elif args.action == 'delete_trigger_all':
+        delete_fitbit_records_all_triggers()
+
+        sys.exit(0)
+
+
     if args.participant_id and args.patient_id:
         print("Please provide just one of them: participant_id or patient_id")
 
@@ -123,14 +139,6 @@ if __name__ == "__main__":
             FitbitRecord.objects.filter(participant=participant).delete()
             FitbitIntradayRecord.objects.filter(participant=participant).delete()
 
-    elif args.action == 'wipe_credential_data_all':
-        if confirm(f"Do you confirm you want to wipe the Fitbit data for all participants? "
-                    "It will erase all the recorded data, except the credential."):
-
-            FitbitInfo.objects.all().delete()
-            FitbitRecord.objects.all().delete()
-            FitbitIntradayRecord.objects.all().delete()
-
     elif args.action == 'recreate_trigger':
         create_fitbit_records_trigger(credential.id)
 
@@ -142,5 +150,3 @@ if __name__ == "__main__":
     elif args.action == 'delete_trigger':
         delete_fitbit_records_trigger(credential.id)
 
-    elif args.action == 'delete_trigger_all':
-        delete_fitbit_records_all_triggers()
