@@ -19,7 +19,8 @@ from libs.fitbit import (
     create_fitbit_records_trigger,
     delete_fitbit_records_trigger,
     do_process_fitbit_records_lambda_handler,
-    trigger_process_fitbit_records
+    trigger_process_fitbit_records,
+    delete_fitbit_records_all_triggers,
 )
 
 def confirm(message):
@@ -54,10 +55,12 @@ if __name__ == "__main__":
         'list',
         'sync',
         'delete_credential',
-        'wipe_credential',
+        'wipe_credential_data',
+        'wipe_credential_data_all',
         'recreate_trigger',
         'recreate_trigger_all',
-        'delete_trigger'
+        'delete_trigger',
+        'delete_trigger_all',
     ])
 
     args = parser.parse_args()
@@ -73,7 +76,7 @@ if __name__ == "__main__":
     elif args.action == 'recreate_trigger_all':
         for credential in FitbitCredentials.objects.all():
             print(f"Recreating credential {credential.id}")
-            create_fitbit_records_trigger(credential)
+            create_fitbit_records_trigger(credential.id)
 
         sys.exit(0)
 
@@ -85,7 +88,7 @@ if __name__ == "__main__":
     if args.patient_id:
         participant = Participant.objects.filter(patient_id=args.patient_id).get()
     if args.credential_id:
-        credential = FitbitCredentials.objects.filter(id=args.credential_id).get()    
+        credential = FitbitCredentials.objects.filter(id=args.credential_id).get()
         participant = credential.participant
 
     try:
@@ -112,18 +115,32 @@ if __name__ == "__main__":
         if confirm(f"Do you confirm you want to delete the Fitbit credential for participant '{participant.patient_id}'?"):
             credential.delete()
 
-    elif args.action == 'wipe_credential':
+    elif args.action == 'wipe_credential_data':
         if confirm(f"Do you confirm you want to wipe the Fitbit credential for participant '{participant.patient_id}'? "
                     "It will erase all the recorded data, except the credential."):
 
-            FitbitInfo.objects.filter(participant=participant)
-            FitbitRecord.objects.filter(participant=participant)
-            FitbitIntradayRecord.objects.filter(participant=participant)
+            FitbitInfo.objects.filter(participant=participant).delete()
+            FitbitRecord.objects.filter(participant=participant).delete()
+            FitbitIntradayRecord.objects.filter(participant=participant).delete()
+
+    elif args.action == 'wipe_credential_data_all':
+        if confirm(f"Do you confirm you want to wipe the Fitbit data for all participants? "
+                    "It will erase all the recorded data, except the credential."):
+
+            FitbitInfo.objects.all().delete()
+            FitbitRecord.objects.all().delete()
+            FitbitIntradayRecord.objects.all().delete()
 
     elif args.action == 'recreate_trigger':
-        create_fitbit_records_trigger(credential)
+        create_fitbit_records_trigger(credential.id)
+
+    elif args.action == 'recreate_trigger_all':
+        delete_fitbit_records_all_triggers()
+        for credential in FitbitCredentials.objects.all():
+            create_fitbit_records_trigger(credential.id, delete=False)
 
     elif args.action == 'delete_trigger':
-        delete_fitbit_records_trigger(credential)
+        delete_fitbit_records_trigger(credential.id)
 
-
+    elif args.action == 'delete_trigger_all':
+        delete_fitbit_records_all_triggers()
