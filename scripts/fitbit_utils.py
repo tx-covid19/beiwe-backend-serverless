@@ -44,6 +44,12 @@ if __name__ == "__main__":
         type=str
     )
 
+    parser.add_argument(
+        '--credential_id',
+        help='Fitbit Credential is.',
+        type=str
+    )
+
     parser.add_argument('action', type=str, choices=[
         'list',
         'sync',
@@ -77,6 +83,9 @@ if __name__ == "__main__":
         participant = Participant.objects.filter(id=args.participant_id).get()
     if args.patient_id:
         participant = Participant.objects.filter(patient_id=args.patient_id).get()
+    if args.credential_id:
+        credential = FitbitCredentials.objects.filter(id=args.credential_id).get()    
+        participant = credential.participant
 
     try:
         credential = FitbitCredentials.objects.filter(participant=participant).get()
@@ -85,7 +94,7 @@ if __name__ == "__main__":
 
     if args.action == 'sync':
 
-        print(f"Fetching Fitbit data from '{participant.patient_id}'...")
+        print(f"Fetching Fitbit data from participant '{participant.patient_id}'...")
 
         do_process_fitbit_records_lambda_handler(
             event={"credential": credential.id},
@@ -94,16 +103,16 @@ if __name__ == "__main__":
 
     elif args.action == 'sync_lambda':
 
-        print(f"Invoking Fitbit lambda for '{participant.patient_id}'...")
+        print(f"Invoking Fitbit lambda for participant '{participant.patient_id}'...")
 
         trigger_process_fitbit_records(credential)
 
     elif args.action == 'delete_credential':
-        if confirm(f"Do you confirm you want to delete the Fitbit credential for '{participant.patient_id}'?"):
+        if confirm(f"Do you confirm you want to delete the Fitbit credential for participant '{participant.patient_id}'?"):
             credential.delete()
 
     elif args.action == 'wipe_credential':
-        if confirm(f"Do you confirm you want to wipe the Fitbit credential for '{participant.patient_id}'? "
+        if confirm(f"Do you confirm you want to wipe the Fitbit credential for participant '{participant.patient_id}'? "
                     "It will erase all the recorded data, except the credential."):
 
             FitbitInfo.objects.filter(participant=participant)
