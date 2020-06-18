@@ -118,14 +118,11 @@ def get_fitbit_client(credential, update_cb=None):
     )
 
 
-def get_fitbit_profile(credential, update_cb=None):
-    fitbit_client = get_fitbit_client(credential, update_cb)
+def get_fitbit_profile(fitbit_client):
     return fitbit_client.user_profile_get()['user']
 
 
-def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_dates=[], info=True, interday=True, intraday=True):
-
-    fitbit_client = get_fitbit_client(credential, update_cb)
+def get_fitbit_record(credential, fitbit_client, base_date, end_date, fetched_dates=[], info=True, interday=True, intraday=True):
 
     if info:
         print(f"Fetching singular data")
@@ -263,8 +260,11 @@ def do_process_fitbit_records_lambda_handler(event, context):
         credential.refresh_token = token_dict['refresh_token']
         credential.save()
 
+    fitbit_client = get_fitbit_client(credential, update_token)
+    fitbit_client.client.refresh_token()
+
     participant = credential.participant
-    profile = get_fitbit_profile(credential)
+    profile = get_fitbit_profile(fitbit_client)
 
     initial_date = '2020-05-01'
     yesterday_date = (
@@ -279,9 +279,9 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
     try:
         for resource_type, resource in get_fitbit_record(
-            credential,
+            credential, fitbit_client,
             initial_date, yesterday_date,
-            update_token, fetched_dates,
+            fetched_dates
         ):
             if resource_type == 'info':
                 FitbitInfo(
