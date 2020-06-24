@@ -104,6 +104,6 @@ def upload_stream_to_subfolder(box_subfolder, stream, target_filename):
         retval = box_subfolder.upload_stream(stream, target_filename, preflight_check=True,
                                              upload_using_accelerator=True)
     except BoxAPIException as e:
-        print(f'Error writing {target_filename} to box.com: {e.message()}')
+        print(f'Error writing {target_filename} to box.com: {e}')
 
     return retval
