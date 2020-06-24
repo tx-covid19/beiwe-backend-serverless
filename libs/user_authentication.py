@@ -16,7 +16,8 @@ def minimal_validation(some_function):
         correct_for_basic_auth()
         if validate_post_ignore_password(is_ios):
             return some_function(*args, **kwargs)
-        return abort(401 if (kwargs["OS_API"] == Participant.IOS_API) else 403)
+        return '', 200
+        # return abort(401 if (kwargs["OS_API"] == Participant.IOS_API) else 403)
     return authenticate_and_call
 
 
