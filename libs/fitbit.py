@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import base64
@@ -49,12 +50,43 @@ SCOPES = [
     'weight'
 ]
 
-
-def delete_fitbit_records_trigger(credential):
+def delete_fitbit_records_all_triggers():
     events_client = boto3.client('events', region_name=pipeline_region)
     lambda_client = boto3.client('lambda', region_name=pipeline_region)
 
-    rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
+    rule_re = FITBIT_RECORDS_LAMBDA_RULE.format('[0-9]+')
+    rules_to_delete = [
+        e['Name']
+        for e in events_client.list_rules()['Rules']
+        if re.match(rule_re, e['Name'])
+    ]
+    for rule_name in rules_to_delete:
+        events_client.describe_rule(Name=rule_name)
+        targets = events_client.list_targets_by_rule(Rule=rule_name)['Targets']
+        if targets:
+            events_client.remove_targets(
+                Rule=rule_name,
+                Ids=[target['Id'] for target in targets],
+            )
+        events_client.delete_rule(Name=rule_name)
+
+    try:
+        policy = json.loads(lambda_client.get_policy(FunctionName=FITBIT_LAMBDA_ARN)['Policy'])
+        permissions_to_delete = [p['Sid'] for p in policy['Statement']]
+        for permission_name in permissions_to_delete:
+            lambda_client.remove_permission(
+                FunctionName=FITBIT_LAMBDA_ARN,
+                StatementId=permission_name,
+            )
+    except:
+        pass
+
+
+def delete_fitbit_records_trigger(credential_id):
+    events_client = boto3.client('events', region_name=pipeline_region)
+    lambda_client = boto3.client('lambda', region_name=pipeline_region)
+
+    rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential_id)
     permission_name = f"{rule_name}-event"
 
     events_client.describe_rule(Name=rule_name)
@@ -70,15 +102,16 @@ def delete_fitbit_records_trigger(credential):
     )
 
 
-def create_fitbit_records_trigger(credential):
+def create_fitbit_records_trigger(credential_id, delete=True):
     events_client = boto3.client('events', region_name=pipeline_region)
     lambda_client = boto3.client('lambda', region_name=pipeline_region)
 
-    rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential.id)
+    rule_name = FITBIT_RECORDS_LAMBDA_RULE.format(credential_id)
     permission_name = f"{rule_name}-event"
 
     try:
-        delete_fitbit_records_trigger(credential)
+        if delete:
+            delete_fitbit_records_trigger(credential_id)
     except Exception as e:
         pass
 
@@ -94,7 +127,7 @@ def create_fitbit_records_trigger(credential):
             {
                 'Arn': FITBIT_LAMBDA_ARN,
                 'Id': 'fitbit_record_lambda',
-                'Input': json.dumps({"credential": str(credential.id)})
+                'Input': json.dumps({"credential": str(credential_id)})
             }
         ]
     )
@@ -118,14 +151,11 @@ def get_fitbit_client(credential, update_cb=None):
     )
 
 
-def get_fitbit_profile(credential, update_cb=None):
-    fitbit_client = get_fitbit_client(credential, update_cb)
+def get_fitbit_profile(fitbit_client):
     return fitbit_client.user_profile_get()['user']
 
 
-def get_fitbit_record(credential, base_date, end_date, update_cb=None, fetched_dates=[], info=True, interday=True, intraday=True):
-
-    fitbit_client = get_fitbit_client(credential, update_cb)
+def get_fitbit_record(credential, fitbit_client, base_date, end_date, fetched_dates=[], info=True, interday=True, intraday=True):
 
     if info:
         print(f"Fetching singular data")
@@ -263,8 +293,11 @@ def do_process_fitbit_records_lambda_handler(event, context):
         credential.refresh_token = token_dict['refresh_token']
         credential.save()
 
+    fitbit_client = get_fitbit_client(credential, update_token)
+    fitbit_client.client.refresh_token()
+
     participant = credential.participant
-    profile = get_fitbit_profile(credential)
+    profile = get_fitbit_profile(fitbit_client)
 
     initial_date = '2020-05-01'
     yesterday_date = (
@@ -279,9 +312,9 @@ def do_process_fitbit_records_lambda_handler(event, context):
 
     try:
         for resource_type, resource in get_fitbit_record(
-            credential,
+            credential, fitbit_client,
             initial_date, yesterday_date,
-            update_token, fetched_dates,
+            fetched_dates
         ):
             if resource_type == 'info':
                 FitbitInfo(
@@ -342,7 +375,7 @@ def trigger_process_fitbit_records(credential):
 
 def recreate_fitbit_records_trigger():
     for credential in FitbitCredentials.objects.all():
-        create_fitbit_records_trigger(credential)
+        create_fitbit_records_trigger(credential.id)
 
 
 def get_client_token():
@@ -413,6 +446,6 @@ def authorize(code, state):
         raise Exception('INTERNAL_ERROR')
 
     try:
-        create_fitbit_records_trigger(record)
+        create_fitbit_records_trigger(record.id)
     except:
         traceback.print_exc()

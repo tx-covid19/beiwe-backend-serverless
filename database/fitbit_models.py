@@ -18,7 +18,7 @@ class FitbitCredentials(models.Model):
         from libs.fitbit import delete_fitbit_records_trigger
 
         try:
-            delete_fitbit_records_trigger(self)
+            delete_fitbit_records_trigger(self.id)
         except:
             pass
 
