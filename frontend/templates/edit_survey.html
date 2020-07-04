@@ -33,20 +33,20 @@
     var imageSurvey = ('{{ survey.survey_type }}' == "image_survey");
     var always_available = settings.always_available || false;
   </script>
-	<script src="{{ url_for('static', filename='javascript/survey-editor/schedule.js') }}"></script>
-	<script src="{{ url_for('static', filename='javascript/survey-editor/survey-editor.js') }}"></script>
-	<!-- <script src="/static/javascript/app/survey-builder/constants.js"></script>
-	     <script src="/static/javascript/app/survey-builder/services.js"></script>
-	     <script src="/static/javascript/app/survey-builder/directives/tooltip/tooltip.js"></script>
-	     <script src="/static/javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.js"></script>
-	     <script src="/static/javascript/app/survey-builder/directives/conditional-block/conditional-block.js"></script>
-	     <script src="/static/javascript/app/survey-builder/directives/logical-block/logical-block.js"></script>
-	     <script src="/static/javascript/app/survey-builder/directives/edit-question/edit-question.js"></script>
-	     <script src="/static/javascript/app/survey-builder/directives/question-summary/question-summary.js"></script> -->
-	<script src="{{ url_for('static', filename='javascript/app/survey-builder/constants.js') }}"></script>
-	<script src="{{ url_for('static', filename='javascript/app/survey-builder/services.js') }}"></script>
-	<script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/tooltip/tooltip.js') }}"></script>
-	<script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/survey-builder-controller.js') }}"></script>
+  <script src="{{ url_for('static', filename='javascript/survey-editor/schedule.js') }}"></script>
+  <script src="{{ url_for('static', filename='javascript/survey-editor/survey-editor.js') }}"></script>
+  <!-- <script src="/static/javascript/app/survey-builder/constants.js"></script>
+       <script src="/static/javascript/app/survey-builder/services.js"></script>
+       <script src="/static/javascript/app/survey-builder/directives/tooltip/tooltip.js"></script>
+       <script src="/static/javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.js"></script>
+       <script src="/static/javascript/app/survey-builder/directives/conditional-block/conditional-block.js"></script>
+       <script src="/static/javascript/app/survey-builder/directives/logical-block/logical-block.js"></script>
+       <script src="/static/javascript/app/survey-builder/directives/edit-question/edit-question.js"></script>
+       <script src="/static/javascript/app/survey-builder/directives/question-summary/question-summary.js"></script> -->
+  <script src="{{ url_for('static', filename='javascript/app/survey-builder/constants.js') }}"></script>
+  <script src="{{ url_for('static', filename='javascript/app/survey-builder/services.js') }}"></script>
+  <script src="{{ url_for('static', filename='javascript/app/survey-builder/directives/tooltip/tooltip.js') }}"></script>
+  <script src="{{ url_for('static', filename='javascript/app/survey-builder/controllers/survey-builder-controller.js') }}"></script>
 {% endblock %}
 
 {% block content %}
@@ -186,103 +186,97 @@
     </div>
   </div>
 
-	<script>
-                  angular.module("surveyBuilder")
-                    .directive("addLogicButtons", ['$sce', function($sce) {
-                      return {
-                        "restrict": "E",
-                        "scope": {
-                          "surveyBuilder": "=",
-                          "newPath": "@"
-                        },
-                        templateUrl: $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.html') }}")
-                      };
-                    }]);
+  <script>
+    angular.module("surveyBuilder")
+      .directive("addLogicButtons", ['$sce', function($sce) {
+        return {
+          "restrict": "E",
+          "scope": {
+            "surveyBuilder": "=",
+            "newPath": "@"
+          },
+          templateUrl: $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/add-logic-buttons/add-logic-buttons.html') }}")
+        };
+      }]);
 
-                   angular.module("surveyBuilder")
-                     .directive("conditionalBlock", ["_", "ARITHMETIC_OPERATORS", '$sce', function(_, ARITHMETIC_OPERATORS, $sce) {
-                       return {
-                         link: function(scope) {
-                           scope._ = _;
-                           scope.ARITHMETIC_OPERATORS = ARITHMETIC_OPERATORS;
-                           scope.$watch("surveyBuilder.currentQuestionFields.question_id", function() {
-                             scope.currentQuestionId = scope.surveyBuilder.currentQuestionFields.question_id;
-                             scope.type = _.keys(scope.surveyBuilder.getValueAtPath(scope.path))[0];
-                           });
-                           scope.getQuestionNumber = function(questionId) {
-                             var index = _.indexOf(scope.surveyBuilder.questionIds, questionId);
-                             if (index >= 0) {
-                               return "Q" + ++index;
-                             } else {
-                               return "(error)"
-                             }
-                           }
-                         },
-                         replace: true,
-                         restrict: "E",
-                         scope: {
-                           surveyBuilder: "=",
-                           path: "@"
-                         },
-                         templateUrl: $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/conditional-block/conditional-block.html') }}")
-                       };
-                     }]);
+    angular.module("surveyBuilder")
+      .directive("conditionalBlock", ["_", "ARITHMETIC_OPERATORS", '$sce', function(_, ARITHMETIC_OPERATORS, $sce) {
+        return {
+          link: function(scope) {
+            scope._ = _;
+            scope.ARITHMETIC_OPERATORS = ARITHMETIC_OPERATORS;
+            scope.$watch("surveyBuilder.currentQuestionFields.question_id", function() {
+              scope.currentQuestionId = scope.surveyBuilder.currentQuestionFields.question_id;
+              scope.type = _.keys(scope.surveyBuilder.getValueAtPath(scope.path))[0];
+            });
+            scope.getQuestionNumber = function(questionId) {
+              var index = _.indexOf(scope.surveyBuilder.questionIds, questionId);
+              if (index >= 0) {
+                return "Q" + ++index;
+              } else {
+                return "(error)"
+              }
+            }
+          },
+          replace: true,
+          restrict: "E",
+          scope: {
+            surveyBuilder: "=",
+            path: "@"
+          },
+          templateUrl: $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/conditional-block/conditional-block.html') }}")
+        };
+      }]);
 
-                     angular.module("surveyBuilder")
-                       .directive("logicalBlock", ["ARITHMETIC_OPERATORS", "LOGICAL_OPERATORS", "_",  "logicService", "$sce", function(ARITHMETIC_OPERATORS, LOGICAL_OPERATORS, _,  logicService, $sce) {
-                         return {
-                           "templateUrl": $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/logical-block/logical-block.html') }}"),
-                           "link": function(scope) {
-                             /* Constants */
-                             scope._ = _;
-                             scope.ARITHMETIC_OPERATORS = ARITHMETIC_OPERATORS;
-                             scope.LOGICAL_OPERATORS = LOGICAL_OPERATORS;
-                             scope.$watch("surveyBuilder.currentQuestionFields.question_id", function() {
-                               scope.type = _.keys(scope.surveyBuilder.getValueAtPath(scope.path))[0];
-                             });
+    angular.module("surveyBuilder")
+      .directive("logicalBlock", ["ARITHMETIC_OPERATORS", "LOGICAL_OPERATORS", "_",  "logicService", "$sce", function(ARITHMETIC_OPERATORS, LOGICAL_OPERATORS, _,  logicService, $sce) {
+        return {
+          "templateUrl": $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/logical-block/logical-block.html') }}"),
+          "link": function(scope) {
+            /* Constants */
+            scope._ = _;
+            scope.ARITHMETIC_OPERATORS = ARITHMETIC_OPERATORS;
+            scope.LOGICAL_OPERATORS = LOGICAL_OPERATORS;
+            scope.$watch("surveyBuilder.currentQuestionFields.question_id", function() {
+              scope.type = _.keys(scope.surveyBuilder.getValueAtPath(scope.path))[0];
+            });
 
-                             scope.getNewPath = function(index) {
-                               return logicService.getNewPath(scope.path, scope.type, index);
-                             };
-                           },
-                           "restrict": "E",
-                           "scope": {
-                             "surveyBuilder": "=",
-                             "path": "@"
-                           },
-                         };
-                       }]);
+            scope.getNewPath = function(index) {
+              return logicService.getNewPath(scope.path, scope.type, index);
+            };
+          },
+          "restrict": "E",
+          "scope": {
+            "surveyBuilder": "=",
+            "path": "@"
+          },
+        };
+      }]);
 
-                 angular.module("surveyBuilder")
-                   .directive("editQuestion", ['$sce', function($sce) {
-                       return {
-                         link: link(),
-                         restrict: "E",
-                         scope: {
-                           show: "@?",
-                           surveyBuilder: "="
-                         },
-		         templateUrl: $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/edit-question/edit-question.html') }}")
-                       };
+    angular.module("surveyBuilder")
+      .directive("editQuestion", ['$sce', function($sce) {
+        return {
+          link: function(scope) {
+            if (scope.show) {
+              // Default to showing the modal
+              $('#editQuestionModal').modal("show");
+            }
+          },
+          restrict: "E",
+          scope: {
+            show: "@?",
+            surveyBuilder: "="
+          },
+          templateUrl: $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/edit-question/edit-question.html') }}")
+        };
+      }]);
 
-                       ////////
-
-                       function link() {
-                         return function(scope) {
-                           if (scope.show) {
-                             // Default to showing the modal
-                             $('#editQuestionModal').modal("show");
-                           }
-                         }
-                       }
-                     }]);
-
-		angular.module("surveyBuilder")
-                    .directive("questionSummary", ['$sce', function($sce) {
-                        return {
-                            "restrict": "E",
-				"templateUrl": $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/question-summary/question-summary.html') }}")
-                        };
-                    }]);
-	</script>
+    angular.module("surveyBuilder")
+      .directive("questionSummary", ['$sce', function($sce) {
+        return {
+          "restrict": "E",
+          "templateUrl": $sce.trustAsResourceUrl("{{ url_for('static', filename='javascript/app/survey-builder/directives/question-summary/question-summary.html') }}")
+        };
+      }]);
+  </script>
 {% endblock %}
