@@ -4,6 +4,9 @@ from database.study_models import Study, StudyField
 from database.user_models import Participant, ParticipantFieldValue, Researcher, ParticipantAliases
 from database.pipeline_models import PipelineExecutionTracking
 from database.fitbit_models import FitbitCredentials
+from database.system_integrations import RedcapIntegration
+from database.redcap_models import RedcapRecord
+from database.profiling_models import UploadTracking
 from libs import admin_authentication
 from libs.admin_authentication import (authenticate_researcher_login,
     authenticate_researcher_study_access, get_researcher_allowed_studies,
@@ -92,14 +95,35 @@ def view_study(study_id=None):
     participants = study.participants.all()
     fitbit_registrations = FitbitCredentials.objects.all().values_list('participant_id', flat=True)
 
+    has_redcap_integration = RedcapIntegration.objects.filter(study_id=study_id).exists()
+    if has_redcap_integration:
+        redcap_record_ids = {r.user_id: r.record_id for r in RedcapRecord.objects.filter(study=study)}
+
+    digital_selfies = UploadTracking.objects.filter(file_path__contains='/digital_selfie/', participant__study_id=study_id)
+    digital_selfies_count = {}
+    for selfie in digital_selfies:
+        participant_id = selfie.participant_id
+        if participant_id not in digital_selfies_count:
+            digital_selfies_count[participant_id] = 0
+        digital_selfies_count[participant_id] += 1
+
     study_fields = list(study.fields.all().values_list('field_name', flat=True))
     study_fields.append('Fitbit')
+    study_fields.append('Digital Selfies')
+
+    if has_redcap_integration:
+        study_fields.append('Record ID')
+
     for p in participants:
-        p.values_dict = {tag.field.field_name: tag.value for tag in p.field_values.all()}
+        p.values_dict = { tag.field.field_name: tag.value for tag in p.field_values.all() }
         if p.id in fitbit_registrations:
             p.values_dict['Fitbit'] = 'Registered'
         else:
             p.values_dict['Fitbit'] = 'Not Registered'
+        p.values_dict['Digital Selfies'] = digital_selfies_count.get(p.id, '')
+
+        if has_redcap_integration:
+            p.values_dict['Record ID'] = redcap_record_ids.get(p.id, '')
 
     aliases = ParticipantAliases.objects.filter(study_id=study_id)
 
