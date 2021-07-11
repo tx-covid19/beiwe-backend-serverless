@@ -1,47 +1,77 @@
-# -*- coding: utf-8 -*-
-import json
+from datetime import datetime
 
+from dateutil.tz import gettz
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models import F, Func
-from django.utils import timezone
+from django.utils.timezone import localtime
 
 from config.constants import ResearcherRole
-from config.study_constants import (ABOUT_PAGE_TEXT, AUDIO_SURVEY_SETTINGS, CONSENT_FORM_TEXT,
-    DEFAULT_CONSENT_SECTIONS_JSON, IMAGE_SURVEY_SETTINGS, SURVEY_SUBMIT_SUCCESS_TOAST_TEXT)
-from database.models import AbstractModel, JSONTextField
+from config.study_constants import (ABOUT_PAGE_TEXT, CONSENT_FORM_TEXT,
+    DEFAULT_CONSENT_SECTIONS_JSON, SURVEY_SUBMIT_SUCCESS_TOAST_TEXT)
+from database.models import JSONTextField, TimestampedModel
+from database.tableau_api_models import ForestParam
 from database.user_models import Researcher
 from database.validators import LengthValidator
 
 
-class Study(AbstractModel):
-    
+class Study(TimestampedModel):
     # When a Study object is created, a default DeviceSettings object is automatically
     # created alongside it. If the Study is created via the researcher interface (as it
     # usually is) the researcher is immediately shown the DeviceSettings to edit. The code
     # to create the DeviceSettings object is in database.signals.populate_study_device_settings.
-    name = models.TextField(unique=True, help_text='Name of the study; can be of any length')
-    encryption_key = models.CharField(max_length=32, validators=[LengthValidator(32)],
-                                      help_text='Key used for encrypting the study data')
-    object_id = models.CharField(max_length=24, unique=True, validators=[LengthValidator(24)],
-                                 help_text='ID used for naming S3 files')
 
+    name = models.TextField(unique=True, help_text='Name of the study; can be of any length')
+    encryption_key = models.CharField(
+        max_length=32, validators=[LengthValidator(32)],
+        help_text='Key used for encrypting the study data'
+    )
+    object_id = models.CharField(
+        max_length=24, unique=True, validators=[LengthValidator(24)],
+        help_text='ID used for naming S3 files'
+    )
     is_test = models.BooleanField(default=True)
+    timezone_name = models.CharField(  # Warning: this is going to be deleted.
+        max_length=256, default="America/New_York", null=False, blank=False
+    )
+    deleted = models.BooleanField(default=False)
+    
+    forest_enabled = models.BooleanField(default=False)
+    # Note: this is not nullable to prevent bugs where this is null, though if forest_enabled is
+    #       False, the forest_param field isn't used
+    forest_param = models.ForeignKey(ForestParam, on_delete=models.PROTECT)
+
+    def save(self, *args, **kwargs):
+        """ Ensure there is a study device settings attached to this study. """
+        # First we just save. This code has vacillated between throwing a validation error and not
+        # during study creation.  Our current fix is to save, then test whether a device settings
+        # object exists.  If not, create it.
+        try:
+            self.forest_param
+        except ObjectDoesNotExist:
+            self.forest_param = ForestParam.objects.get(default=True)
+        super().save(*args, **kwargs)
+        try:
+            self.device_settings
+        except ObjectDoesNotExist:
+            settings = DeviceSettings(study=self)
+            self.device_settings = settings
+            settings.save()
+            # update the study object to have a device settings object (possibly unnecessary?).
+            super().save(*args, **kwargs)
+
+
 
     @classmethod
     def create_with_object_id(cls, **kwargs):
-        """
-        Creates a new study with a populated object_id field
-        """
-        
+        """ Creates a new study with a populated object_id field. """
         study = cls(object_id=cls.generate_objectid_string("object_id"), **kwargs)
         study.save()
         return study
 
     @classmethod
     def get_all_studies_by_name(cls):
-        """
-        Sort the un-deleted Studies a-z by name, ignoring case.
-        """
+        """ Sort the un-deleted Studies a-z by name, ignoring case. """
         return (cls.objects
                 .filter(deleted=False)
                 .annotate(name_lower=Func(F('name'), function='LOWER'))
@@ -54,52 +84,37 @@ class Study(AbstractModel):
                 study_relations__relationship=ResearcherRole.study_admin,
             )
 
-    def get_surveys_for_study(self, requesting_os):
-        survey_json_list = []
-        for survey in self.surveys.filter(deleted=False):
-            survey_dict = survey.as_native_python()
-            # Make the dict look like the old Mongolia-style dict that the frontend is expecting
-            survey_dict.pop('id')
-            survey_dict.pop('deleted')
-            survey_dict['_id'] = survey_dict.pop('object_id')
-            
-            # Exclude image surveys for the Android app to avoid crashing it
-            if requesting_os == "ANDROID" and survey.survey_type == "image_survey":
-                pass
-            else:
-                survey_json_list.append(survey_dict)
-                
-        return survey_json_list
-
-    def get_survey_ids_for_study(self, survey_type='tracking_survey'):
-        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', flat=True)
-
-    def get_survey_ids_and_object_ids_for_study(self, survey_type='tracking_survey'):
-        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', 'object_id')
-
-    def get_study_device_settings(self):
-        return self.device_settings
-
-    def get_researchers(self):
-        return Researcher.objects.filter(study_relations__study=self)
-
     @classmethod
     def get_researcher_studies_by_name(cls, researcher):
         return cls.get_all_studies_by_name().filter(study_relations__researcher=researcher)
 
-    def get_researchers_by_name(self):
-        return (
-            Researcher.objects.filter(study_relations__study=self)
-                .annotate(name_lower=Func(F('username'), function='LOWER'))
-                .order_by('name_lower')
-                .exclude(username__icontains="BATCH USER").exclude(username__icontains="AWS LAMBDA")
-        )
+    def get_survey_ids_and_object_ids(self, survey_type='tracking_survey'):
+        return self.surveys.filter(survey_type=survey_type, deleted=False).values_list('id', 'object_id')
 
-    # We override the as_native_python function to not include the encryption key.
-    def as_native_python(self, remove_timestamps=True, remove_encryption_key=True):
-        ret = super(Study, self).as_native_python(remove_timestamps=remove_timestamps)
+    def get_researchers(self):
+        return Researcher.objects.filter(study_relations__study=self)
+
+    # We override the as_unpacked_native_python function to not include the encryption key.
+    def as_unpacked_native_python(self, remove_timestamps=True):
+        ret = super().as_unpacked_native_python(remove_timestamps=remove_timestamps)
         ret.pop("encryption_key")
         return ret
+
+    def notification_events(self, **archived_event_filter_kwargs):
+        from database.schedule_models import ArchivedEvent
+        return ArchivedEvent.objects.filter(
+            survey_archive_id__in=self.surveys.all().values_list("archives__id", flat=True)
+        ).filter(**archived_event_filter_kwargs).order_by("-scheduled_time")
+
+    def now(self) -> datetime:
+        """ Returns a timezone.now() equivalence in the study's timezone. """
+        return localtime(localtime(), timezone=self.timezone)  # localtime(localtime(... saves an import... :D
+
+    @property
+    def timezone(self):
+        """ So pytz.timezone("America/New_York") provides a tzinfo-like object that is wrong by 4
+        minutes.  That's insane.  The dateutil gettz function doesn't have that fun insanity. """
+        return gettz(self.timezone_name)
 
 
 class StudyField(models.Model):
@@ -110,94 +125,7 @@ class StudyField(models.Model):
         unique_together = (("study", "field_name"),)
 
 
-class AbstractSurvey(AbstractModel):
-    """ AbstractSurvey contains all fields that we want to have copied into a survey backup whenever
-    it is updated. """
-    
-    AUDIO_SURVEY = 'audio_survey'
-    TRACKING_SURVEY = 'tracking_survey'
-    DUMMY_SURVEY = 'dummy'
-    IMAGE_SURVEY = 'image_survey'
-    SURVEY_TYPE_CHOICES = (
-        (AUDIO_SURVEY, AUDIO_SURVEY),
-        (TRACKING_SURVEY, TRACKING_SURVEY),
-        (DUMMY_SURVEY, DUMMY_SURVEY),
-        (IMAGE_SURVEY, IMAGE_SURVEY)
-    )
-    
-    content = JSONTextField(default='[]', help_text='JSON blob containing information about the survey questions.')
-    survey_type = models.CharField(max_length=16, choices=SURVEY_TYPE_CHOICES,
-                                   help_text='What type of survey this is.')
-    settings = JSONTextField(default='{}', help_text='JSON blob containing settings for the survey.')
-    timings = JSONTextField(default=json.dumps([[], [], [], [], [], [], []]),
-                            help_text='JSON blob containing the times at which the survey is sent.')
-    
-    class Meta:
-        abstract = True
-
-
-class Survey(AbstractSurvey):
-    """
-    Surveys contain all information the app needs to display the survey correctly to a participant,
-    and when it should push the notifications to take the survey.
-
-    Surveys must have a 'survey_type', which is a string declaring the type of survey it
-    contains, which the app uses to display the correct interface.
-
-    Surveys contain 'content', which is a JSON blob that is unpacked on the app and displayed
-    to the participant in the form indicated by the survey_type.
-
-    Timings schema: a survey must indicate the day of week and time of day on which to trigger;
-    by default it contains no values. The timings schema mimics the Java.util.Calendar.DayOfWeek
-    specification: it is zero-indexed with day 0 as Sunday. 'timings' is a list of 7 lists, each
-    inner list containing any number of times of the day. Times of day are integer values
-    indicating the number of seconds past midnight.
-    
-    Inherits the following fields from AbstractSurvey
-    content
-    survey_type
-    settings
-    timings
-    """
-
-    # This is required for file name and path generation
-    object_id = models.CharField(max_length=24, unique=True, validators=[LengthValidator(24)])
-    # the study field is not inherited because we need to change its related name
-    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='surveys')
-
-    @classmethod
-    def create_with_object_id(cls, **kwargs):
-        object_id = cls.generate_objectid_string("object_id")
-        survey = cls.objects.create(object_id=object_id, **kwargs)
-        return survey
-
-    @classmethod
-    def create_with_settings(cls, survey_type, **kwargs):
-        """
-        Create a new Survey with the provided survey type and attached to the given Study,
-        as well as any other given keyword arguments. If the Survey is audio/image and no other
-        settings are given, give it the default audio/image survey settings.
-        """
-        
-        if survey_type == cls.AUDIO_SURVEY and 'settings' not in kwargs:
-            kwargs['settings'] = json.dumps(AUDIO_SURVEY_SETTINGS)
-        elif survey_type == cls.IMAGE_SURVEY and 'settings' not in kwargs:
-            kwargs['settings'] = json.dumps(IMAGE_SURVEY_SETTINGS)
-
-        survey = cls.create_with_object_id(survey_type=survey_type, **kwargs)
-        return survey
-
-
-class SurveyArchive(AbstractSurvey):
-    """ All felds declared in abstract survey are copied whenever a change is made to a survey """
-    archive_start = models.DateTimeField()
-    archive_end = models.DateTimeField(default=timezone.now)
-    # two new foreign key references
-    survey = models.ForeignKey('Survey', on_delete=models.PROTECT, related_name='archives')
-    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='surveys_archive')
-
-
-class DeviceSettings(AbstractModel):
+class DeviceSettings(TimestampedModel):
     """
     The DeviceSettings database contains the structure that defines
     settings pushed to devices of users in of a study.
@@ -259,63 +187,3 @@ class DeviceSettings(AbstractModel):
     consent_sections = JSONTextField(default=DEFAULT_CONSENT_SECTIONS_JSON)
 
     study = models.OneToOneField('Study', on_delete=models.PROTECT, related_name='device_settings')
-
-
-class DashboardColorSetting(AbstractModel):
-    """ Database model, details of color settings point at this model. """
-    data_type = models.CharField(max_length=32)
-    study = models.ForeignKey("Study", on_delete=models.PROTECT, related_name="dashboard_colors")
-
-    class Meta:
-        # only one of these color settings per-study-per-data type
-        unique_together = (("data_type", "study"),)
-
-    def get_dashboard_color_settings(self):
-        # return a (json serializable) dict of a dict of the gradient and a list of dicts for
-        # the inflection points.
-
-        # Safely/gracefully access the gradient's one-to-one field.
-        try:
-            gradient = {
-                "color_range_min": self.gradient.color_range_min,
-                "color_range_max": self.gradient.color_range_max,
-            }
-        except DashboardGradient.DoesNotExist:
-            gradient = {}
-
-        return {
-            "gradient": gradient,
-            "inflections": list(self.inflections.values("operator", "inflection_point")),
-        }
-
-    def gradient_exists(self):
-        try:
-            if self.gradient:
-                return True
-        except DashboardGradient.DoesNotExist:
-            # this means that the dashboard gradieint does not exist in the database
-            return False
-
-
-class DashboardGradient(AbstractModel):
-    # It should be the case that there is only one gradient per DashboardColorSettings
-    dashboard_color_setting = models.OneToOneField(
-        DashboardColorSetting, on_delete=models.PROTECT, related_name="gradient", unique=True,
-    )
-
-    # By setting both of these to 0 the frontend will automatically use tha biggest and smallest
-    # values on the current page.
-    color_range_min = models.IntegerField(default=0)
-    color_range_max = models.IntegerField(default=0)
-
-
-class DashboardInflection(AbstractModel):
-    # an inflection corresponds to a flag value that has an operator to display a "flag" on the dashboard front end
-    dashboard_color_setting = models.ForeignKey(
-        DashboardColorSetting, on_delete=models.PROTECT, related_name="inflections"
-    )
-
-    # these are a mathematical operator and a numerical "inflection point"
-    # no default for the operator, default of 0 is safe.
-    operator = models.CharField(max_length=1)
-    inflection_point = models.IntegerField(default=0)

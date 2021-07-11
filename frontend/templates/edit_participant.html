@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Participant Page{% endblock %}
+
+{%  block content %}
+  <div class="title">
+    <h1> {{ participant }}</h1>
+  </div>
+
+  <ol class="breadcrumb">
+    <li>
+      <a href="/view_study/{{ study.id }}">{{ study.name }}</a>
+    </li>
+    <li class="active">
+      Edit the attributes of participant {{ participant.patient_id }}
+    </li>
+  </ol>
+
+  {# Go to Dashboard button  #}
+  <a class="btn btn-info" href='/dashboard/{{ study.id }}/patient/{{ participant.patient_id }}'>Go to Participant Dashboard</a>&nbsp;
+
+  <br><br><br><br>
+
+  <table class="table table-borderless" style="width:auto;">
+    <!-- Reset password -->
+    <tr>
+      <td class="viewParticipantTable"><b>Password:</b></td>
+      <td>
+        <form action="/reset_participant_password" method="post">
+          <input type="hidden" name="patient_id" value="{{ participant.patient_id }}">
+          <input type="hidden" name="study_id" value="{{ study.id }}">
+          <button type="submit" class="btn btn-warning reset_password_button">Reset Password</button>
+        </form>
+      </td>
+    </tr>
+
+    <!-- Unregister smartphone button -->
+    <tr>
+      <td class="viewParticipantTable"><b>Phone registered:</b></td>
+      {% if participant.device_id %}
+        <td>
+          <form action="/reset_device" method="post">
+            <input type="hidden" name="patient_id" value="{{ participant.patient_id }}">
+            <input type="hidden" name="study_id" value="{{ study.id }}">
+            <button class="btn btn-warning reset_device_button"
+                    title="Enable this participant to register the Beiwe app on a new phone. This will NOT block their previous or existing phone from uploading data."
+                    type="submit" >
+              Un-Register Smartphone
+            </button>
+          </form>
+       </td>
+      {% else %}
+        <td class="viewParticipantTable">
+          <i>No smartphone registered</i>
+        </td>
+      {% endif %}
+    </tr>
+
+    <!-- Phone OS info -->
+    <tr>
+      <td class="viewParticipantTable">
+        <b>Phone operating system:</b>
+      </td>
+      <td class="viewParticipantTable">
+        {% if participant.os_type %}
+          {{ participant.os_type }}
+        {% else %}
+          <i>unknown</i>
+        {% endif %}
+      </td>
+    </tr>
+
+    <!-- End data collection -->
+    <tr>
+      <td class="viewParticipantTable">
+        <b>End data collection:</b>
+      </td>
+      {% if participant.unregistered %}
+        <td class="viewParticipantTable">
+          <i>Data collection ended. Participant is blocked from uploading additional data from any phone.</i>
+        </td>
+      {% else %}
+        <td>
+          <form action="/unregister_participant" method="post">
+            <input type="hidden" name="patient_id" value="{{ participant.patient_id }}">
+            <input type="hidden" name="study_id" value="{{ study.id }}">
+            <button class="btn btn-danger"
+                    onclick="return confirm('Are you sure you want to permanently end data collection from {{ participant.patient_id }}?')"
+                    title="Block this participant from uploading data from any phone. This won't affect data they've already uploaded. Careful! You can't undo this."
+                    type="submit">
+              End Data Collection
+            </button>
+          </form>
+        </td>
+      {% endif %}
+    </tr>
+  </table>
+
+  <br><hr><br>
+
+  <form action="/view_study/{{ study.id }}/edit_participant/{{ participant.id }}" class="form-horizontal" method="POST">
+
+    {% if push_notifications_enabled_for_ios or push_notifications_enabled_for_android %}
+      <h3>Interventions</h3>
+      {% if study.interventions.count() > 0 %}
+        {% for intervention_id, intervention_name, intervention_date in intervention_data %}
+          <div class="form-group">
+            <label class="control-label col-sm-2" for="intervention{{ intervention_id }}" > {{ intervention_name }}</label>
+              <div class="col-sm-3">
+              {% if intervention_date %}
+                <input id="intervention{{ intervention_id }}" name="intervention{{ intervention_id }}" class="form-control" type="date"
+                       value="{{ intervention_date }}">
+              {% else %}
+                <input id="intervention{{ intervention_id }}" name="intervention{{ intervention_id }}" class="form-control" type="date">
+              {% endif %}
+            </div>
+          </div>
+        {%  endfor %}
+      {% else %}
+        <p><b>This study does not have any Interventions.</b></p>
+      {% endif %}
+    {% endif %}
+
+    <br>
+
+    <h3>Custom Fields</h3>
+    {% if study.fields.count() > 0 %}
+      {% for field_id, field_name, value in field_values %}
+        <div class="form-group">
+          <label class="col-sm-2 control-label" for="field{{ field_id }}">{{ field_name }}</label>
+          <div class="col-sm-4">
+            <input id="field{{ field_id }}" name="field{{ field_id }}" class="form-control" type="text"
+                   value="{{ value }}">
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p><b>This study does not have any Custom Fields.</b></p>
+    {% endif %}
+
+
+
+    {% if not readonly %}
+      {% if study.interventions.count() > 0 or study.fields.count() > 0 %}
+        <button class="btn btn-primary btn-block" type="submit">Save Changes</button>
+      {% endif %}
+    {% endif %}
+  </form>
+{%  endblock %}
+

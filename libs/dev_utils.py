@@ -3,12 +3,192 @@ from collections import defaultdict
 from inspect import getframeinfo, stack
 from os.path import relpath
 from pprint import pprint
+from statistics import mean, stdev
 from time import perf_counter
+from types import FunctionType, MethodType
+
+from math import sqrt
+
+from database.survey_models import Survey
+from database.user_models import Participant
 
 PROJECT_PATH = __file__.rsplit("/", 2)[0]
+class DevUtilError(BaseException): pass
 
 
-def print_type(display_value=True, **kwargs):
+class TxtClr:
+    BLACK = "\x1b[0m"  # "default"?
+    RED = "\x1b[31m"
+    YELLOW = "\x1b[33m"
+    GREEN = "\x1b[32m"
+    CYAN = "\x1b[36m"
+
+    @classmethod
+    def brightness_swap(cls):
+        if cls.RED != "\x1b[31m":
+            cls.RED = "\x1b[31m"
+            cls.YELLOW = "\x1b[33m"
+            cls.GREEN = "\x1b[32m"
+            cls.CYAN = "\x1b[36m"
+        else:
+            cls.RED = "\x1b[91m"
+            cls.YELLOW = "\x1b[93m"
+            cls.GREEN = "\x1b[92m"
+            cls.CYAN = "\x1b[96m"
+
+
+def disambiguate_participant_survey(func):
+    """ This wrapper allows a function to take any combination of (participant, survey)
+        mostly used in debugging push notifications.
+    """
+    @functools.wraps(func)
+    def _disambiguate_participant_survey(*args, **kwargs):
+        args = list(args)  # not initially mutable
+
+        participant = args[0]  # The first parameter is positional
+        survey = args[1] if len(args) >= 2 else None
+
+        msg = "pass in a survey object, a survey's object_id key, a participant, or a participnt's patient_id"
+        assert participant is None or isinstance(participant, (Survey, Participant, str)), msg
+        assert survey is None or isinstance(survey, (Survey, str)), msg
+
+        # case: (participant: None, survey: something).  we actually handle that in reverse already!
+        if participant is None and survey is not None:
+            participant, survey = survey, participant
+
+        # allows passing in just a survey - if no survey and participant is a survey
+        if not survey and isinstance(participant, Survey):
+            participant, survey = survey, participant
+
+        # if only a participant but its an object_id
+        if isinstance(participant, str) and len(participant) == 24:
+            participant, survey = survey, participant
+
+        # string to participant
+        if isinstance(participant, str):
+            try:
+                participant = Participant.objects.get(patient_id=participant)
+            except Participant.DoesNotExist:
+                raise TypeError(f"no matching participant for '{participant}'")
+
+        # string to survey
+        if isinstance(survey, str):
+            if len(survey) == 24:
+                try:
+                    survey = Survey.objects.get(object_id=survey)
+                except Survey.DoesNotExist:
+                    pass
+            else:
+                raise TypeError(f"'{survey}' was a string, but it had the wrong length...")
+
+        # reassign and/or add
+        args[0] = participant
+        # if we swapped survey or if there was originally a parameter we treated as a survey
+        if len(args) > 1:
+            args[1] = survey
+        elif survey:
+            args.append(survey)
+
+        return func(*args, **kwargs)
+
+    return _disambiguate_participant_survey
+
+
+class GlobalTimeTracker:
+    """
+    Populate with events, prints event time summaries on deallocation.
+
+    To avoid overhead we initialize an instance of the GlobalTimeTracker
+    when the first event is added.  This way the object is only instantiated
+    if there are any events.  The __del__ function is an instance method,
+    so by initializing lazily we skip it entirely.
+    """
+
+    function_pointers = defaultdict(list)
+    global_time_tracker = None
+
+    @classmethod
+    def add_event(
+            cls, function: FunctionType or MethodType, duration: float, exception: Exception = None
+    ):
+        # initialize and point to new function on the first call
+        cls.global_time_tracker = GlobalTimeTracker()
+
+        #
+        # This is the REAL add_event function
+        #
+        @classmethod  # this decorator ... is allowed here. Cool.
+        def _add_event(
+                cls: GlobalTimeTracker,  # and we can declare our own type, lol.
+                function: FunctionType or MethodType,
+                duration: float,
+                exception: Exception = None
+        ):
+            if exception is None:
+                cls.function_pointers[function. __name__, function].append(duration)
+            else:
+                cls.function_pointers[function.__name__, function, str(exception)].append(duration)
+
+        # repoint, call.
+        cls.add_event = _add_event
+        cls.add_event(function=function, duration=duration, exception=exception)
+
+    @classmethod
+    def print_summary(cls):
+        """ Prints a summary of runtime statistics."""
+
+        for components, times in cls.function_pointers.items():
+            name = components[0]
+            pointer = components[1]
+            exception = None if len(components) <= 2 else components[2]
+            # these as variable names is easier
+            name_and_exception = f"{name} {str(exception)}"
+            final_name = name if not exception else name_and_exception
+
+            print(
+                "\n"
+                f"function: {final_name}",
+                "\n"
+                f"calls: {len(times)}",
+                "\n"
+                f"total milliseconds: {sum(times)}",
+                "\n"
+                f"min: {min(times)}",
+                f"\n"
+                f"max: {max(times)}",
+                f"\n"
+                f"mean: {mean(times)}",
+                "\n"
+                f"rms: {sqrt(mean(t * t for t in times))}",
+                "\n"
+                f"stdev: {'xxx' if len(times) == 1 else stdev(times)}"
+            )
+
+    def __del__(self, *args, **kwargs):
+        """ On deallocation, print a bunch of statistics. """
+        self.print_summary()
+
+    @staticmethod
+    def track_function(some_function):
+        """ wraps a function with a timer that records to a GlobalTimeTracker"""
+        @functools.wraps(some_function)
+        def wrapper(*args, **kwargs):
+            try:
+                # perf counter is in milliseconds
+                t_start = perf_counter() * 1000
+                ret = some_function(*args, **kwargs)
+                t_end = perf_counter() * 1000
+                GlobalTimeTracker.add_event(some_function, t_end - t_start)
+                return ret
+            except Exception as e:
+                t_end = perf_counter() * 1000
+                # t_start always exists unless there is a bug in perf_timer
+                GlobalTimeTracker.add_event(some_function, t_end - t_start, e)
+                raise
+        return wrapper
+
+
+def print_types(display_value=True, **kwargs):
     if display_value:
         for k, v in kwargs.items():
             print(f"TYPE INFO -- {k}: {v}, {type(v)}")

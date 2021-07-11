@@ -4,7 +4,8 @@ import json
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from database.study_models import Study, Survey, DeviceSettings
+from database.study_models import Study, DeviceSettings
+from database.survey_models import Survey
 from database.user_models import Participant, Researcher
 
 
@@ -164,7 +165,7 @@ class ResearcherModelTests(CommonTestCase):
     def test_researcher_mongo_integrity(self):
         researcher = Researcher(**self.translated_reference_researcher)
         x = compare_dictionaries(self.translated_reference_researcher,
-                                 researcher.as_native_python(),
+                                 researcher.as_unpacked_native_python(),
                                  ignore=["deleted", "id"])
         self.assertTrue(x)
     
@@ -191,7 +192,7 @@ class ParticipantModelTests(CommonTestCase):
     
         reference_participant = self.translated_reference_participant
         django_participant = Participant(study=study,
-                                         **reference_participant).as_native_python()
+                                         **reference_participant).as_unpacked_native_python()
         
         x = compare_dictionaries(reference_participant,
                                  django_participant,
@@ -221,7 +222,7 @@ class StudyModelTests(CommonTestCase):
     def test_study_mongo_integrity(self):
         django_reference_study = Study(**self.translated_reference_study)
         x = compare_dictionaries(self.translated_reference_study,
-                                 django_reference_study.as_native_python(),
+                                 django_reference_study.as_unpacked_native_python(),
                                  ignore=['id'])
         self.assertTrue(x)
     
@@ -306,12 +307,6 @@ class SurveyModelTests(CommonTestCase):
 
     # Survey model tests:
     def test_survey_create_with_settings(self): raise NotImplementedError
-
-    def test_get_surveys_for_study(self): raise NotImplementedError
-
-    def test_get_survey_ids_for_study(self): raise NotImplementedError
-    
-    def test_get_study_device_settings(self): raise NotImplementedError
 
 
 class DeviceSettingsTests(CommonTestCase):

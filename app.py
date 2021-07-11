@@ -3,50 +3,60 @@ from datetime import datetime
 
 import jinja2
 from flask import Flask, redirect, render_template
+from flask_cors import CORS
 from raven.contrib.flask import Sentry
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from config import load_django
-
-from api import (admin_api, copy_study_api, dashboard_api, data_access_api, data_pipeline_api,
-    mobile_api, participant_administration, survey_api)
+from api import (admin_api, copy_study_api, dashboard_api, data_access_api, mobile_api,
+    other_researcher_apis, participant_administration, push_notifications_api, study_api,
+    survey_api)
+from api.tableau_api.views import SummaryStatisticDailyStudyView
+from api.tableau_api.web_data_connector import WebDataConnector
+from authentication.admin_authentication import is_logged_in
 from config.settings import SENTRY_ELASTIC_BEANSTALK_DSN, SENTRY_JAVASCRIPT_DSN
-from libs.admin_authentication import is_logged_in
 from libs.security import set_secret_key
-from pages import (admin_pages, data_access_web_form, mobile_pages, survey_designer,
-    system_admin_pages)
+from libs.sentry import normalize_sentry_dsn
+from pages import (admin_pages, data_access_web_form, login_pages, mobile_pages, survey_designer,
+                   system_admin_pages, forest_pages)
 
+# Flask App
+app = Flask(__name__, static_folder="frontend/static")
+app.jinja_loader = jinja2.ChoiceLoader(
+    [app.jinja_loader, jinja2.FileSystemLoader("frontend/templates")]
+)
+set_secret_key(app)
+app.wsgi_app = ProxyFix(app.wsgi_app)
 
-def subdomain(directory):
-    app = Flask(__name__, static_folder=directory + "/static")
-    set_secret_key(app)
-    loader = [app.jinja_loader, jinja2.FileSystemLoader(directory + "/templates")]
-    app.jinja_loader = jinja2.ChoiceLoader(loader)
-    app.wsgi_app = ProxyFix(app.wsgi_app)
-    return app
+CORS(app)
 
-
-# Register pages here
-app = subdomain("frontend")
-app.jinja_env.globals['current_year'] = datetime.now().strftime('%Y')
+# Flask Blueprints
+app.register_blueprint(login_pages.login_pages)
 app.register_blueprint(mobile_api.mobile_api)
 app.register_blueprint(admin_pages.admin_pages)
 app.register_blueprint(mobile_pages.mobile_pages)
 app.register_blueprint(system_admin_pages.system_admin_pages)
+app.register_blueprint(forest_pages.forest_pages)
 app.register_blueprint(survey_designer.survey_designer)
 app.register_blueprint(admin_api.admin_api)
 app.register_blueprint(participant_administration.participant_administration)
 app.register_blueprint(survey_api.survey_api)
+app.register_blueprint(study_api.study_api)
 app.register_blueprint(data_access_api.data_access_api)
 app.register_blueprint(data_access_web_form.data_access_web_form)
+app.register_blueprint(other_researcher_apis.other_researcher_apis)
 app.register_blueprint(copy_study_api.copy_study_api)
-app.register_blueprint(data_pipeline_api.data_pipeline_api)
 app.register_blueprint(dashboard_api.dashboard_api)
+app.register_blueprint(push_notifications_api.push_notifications_api)
+SummaryStatisticDailyStudyView.register_urls(app)
+WebDataConnector.register_urls(app)
+
+# Jinja
+app.jinja_env.globals['current_year'] = datetime.now().strftime('%Y')
 
 
-# Don't set up Sentry for local development
-if os.environ['DJANGO_DB_ENV'] != 'local':
-    sentry = Sentry(app, dsn=SENTRY_ELASTIC_BEANSTALK_DSN)
+# Sentry is not required, that was too much of a hassle
+if SENTRY_ELASTIC_BEANSTALK_DSN:
+    sentry = Sentry(app, dsn=normalize_sentry_dsn(SENTRY_ELASTIC_BEANSTALK_DSN))
 
 
 @app.route("/<page>.html")
@@ -55,9 +65,13 @@ def strip_dot_html(page):
     return redirect("/%s" % page)
 
 
+# this would be called every page load in the context processor
+DERIVED_DSN = normalize_sentry_dsn(SENTRY_JAVASCRIPT_DSN)
+
+
 @app.context_processor
 def inject_dict_for_all_templates():
-    return {"SENTRY_JAVASCRIPT_DSN": SENTRY_JAVASCRIPT_DSN}
+    return {"SENTRY_JAVASCRIPT_DSN": DERIVED_DSN}
 
 
 # Extra Production settings
@@ -67,10 +81,7 @@ if not __name__ == '__main__':
     def e404(e):
         return render_template("404.html", is_logged_in=is_logged_in()), 404
 
+
 # Extra Debugging settings
 if __name__ == '__main__':
-    # might be necessary if running on windows/linux subsystem on windows.
-    # from gevent.wsgi import WSGIServer
-    # http_server = WSGIServer(('', 8080), app)
-    # http_server.serve_forever()
     app.run(host='0.0.0.0', port=int(os.getenv("PORT", "8080")), debug=True)

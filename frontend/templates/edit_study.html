@@ -108,6 +108,42 @@
   </div>
 
   <br><br><br>
+    <div class="row">
+    <h2>Toggle Forest</h2>
+    <p>Forest is currently {% if study.forest_enabled %}enabled{% else %}disabled{% endif %}.</p>
+    <form action="/toggle_study_forest_enabled/{{ study.id }}" method="post">
+      {% if study.forest_enabled %}
+        <div class="col-md-2">
+          <button class="btn btn-danger" type="submit">Disable Forest</button>
+        </div>
+      {% else %}
+        <div class="col-md-2">
+          <button class="btn btn-success" type="submit">Enable Forest</button>
+        </div>
+      {% endif %}
+    </form>
+  </div>
+
+  <br><br><br>
+
+  <div class="row">
+    <h2>Set Study Timezone</h2>
+    <form action="/set_study_timezone/{{ study.id }}" method="post">
+      <div class="col-md-10">
+        <h5>
+          DO NOT CHANGE THE STUDY TIMEZONE AFTER YOU HAVE ALREADY SENT SURVEYS OUT TO PARTICIPANTS.  If you change the Study Timezone, Beiwe will immediately resend all previously sent absolute-date and relative-date surveys.
+        </h5>
+        <select class="form-control" name="new_timezone_name">
+          {% for name, value in timezones %}
+            <option value="{{ name }}" {% if name == study.timezone_name %}selected{% endif %}>{{ value }} </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-warning" type="submit">Update Timezone</button>
+      </div>
+    </form>
+  </div>
 
   <div class="row">
     <h2>Rename study</h2>

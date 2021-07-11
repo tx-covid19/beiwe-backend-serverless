@@ -1,16 +1,15 @@
 from datetime import timedelta
-from time import sleep
 
 from django.db import models
 from django.utils import timezone
 
-from config.constants import UPLOAD_FILE_TYPE_MAPPING
+from config.constants import (DATA_STREAM_TO_S3_FILE_NAME_STRING,
+    UPLOAD_FILE_TYPE_MAPPING)
+from database.models import JSONTextField, Participant, TimestampedModel
 from libs.security import decode_base64
-from database.models import JSONTextField, AbstractModel, Participant
 
 
-class EncryptionErrorMetadata(AbstractModel):
-    
+class EncryptionErrorMetadata(TimestampedModel):
     file_name = models.CharField(max_length=256)
     total_lines = models.PositiveIntegerField()
     number_errors = models.PositiveIntegerField()
@@ -19,8 +18,7 @@ class EncryptionErrorMetadata(AbstractModel):
     participant = models.ForeignKey('Participant', on_delete=models.PROTECT, null=True)
 
 
-class LineEncryptionError(AbstractModel):
-
+class LineEncryptionError(TimestampedModel):
     AES_KEY_BAD_LENGTH = "AES_KEY_BAD_LENGTH"
     EMPTY_KEY = "EMPTY_KEY"
     INVALID_LENGTH = "INVALID_LENGTH"
@@ -47,14 +45,13 @@ class LineEncryptionError(AbstractModel):
     
     type = models.CharField(max_length=32, choices=ERROR_TYPE_CHOICES)
     line = models.TextField(blank=True)
-    base64_decryption_key = models.CharField(max_length=256)
+    base64_decryption_key = models.TextField()
     prev_line = models.TextField(blank=True)
     next_line = models.TextField(blank=True)
     participant = models.ForeignKey(Participant, null=True, on_delete=models.PROTECT)
 
 
-class DecryptionKeyError(AbstractModel):
-    
+class DecryptionKeyError(TimestampedModel):
     file_path = models.CharField(max_length=256)
     contents = models.TextField()
     traceback = models.TextField(null=True)
@@ -64,28 +61,23 @@ class DecryptionKeyError(AbstractModel):
         return decode_base64(self.contents)
 
 
-class UploadTracking(AbstractModel):
-    
+class UploadTracking(TimestampedModel):
     file_path = models.CharField(max_length=256)
     file_size = models.PositiveIntegerField()
     timestamp = models.DateTimeField()
-
     participant = models.ForeignKey('Participant', on_delete=models.PROTECT, related_name='upload_trackers')
 
     @classmethod
     def re_add_files_to_process(cls, number=100):
         """ Re-adds the most recent [number] files that have been uploaded recently to FiletToProcess.
             (this is fairly optimized because it is part of debugging file processing) """
-        uploads = cls.objects.order_by("-created_on").values_list(
-            "file_path", "participant__study__object_id", "participant_id"
-        )[:number]
-
         from database.data_access_models import FileToProcess
-
-        # uhg need to cache participants...
-        participant_cache = {}
-
-        for i, (file_path, participant__study__object_id, participant_id) in enumerate(uploads):
+        uploads = cls.objects.order_by("-created_on").values_list(
+            "file_path", "participant__study_id", "participant_id"
+        )[:number]
+        new_ftps = []
+        participant_cache = {}  # uhg need to cache participants...
+        for i, (file_path, study_id, participant_id) in enumerate(uploads):
             if participant_id in participant_cache:
                 participant = participant_cache[participant_id]
             else:
@@ -99,12 +91,63 @@ class UploadTracking(AbstractModel):
                 print(f"skipping {file_path}, appears to already be present")
                 continue
 
-            FileToProcess.append_file_for_processing(
-                # file_path, study_object_id, **kwargs
-                file_path,
-                participant__study__object_id,
-                participant=participant,
+            new_ftps.append(FileToProcess(
+                s3_file_path=file_path,
+                study_id=study_id,
+                participant=participant
+            ))
+        FileToProcess.objects.bulk_create(
+            new_ftps
+        )
+            # FileToProcess.append_file_for_processing(
+            #     # file_path, study_object_id, **kwargs
+            #     file_path,
+            #     # participant__study__object_id,
+            #     participant=participant,
+            # )
+
+    @classmethod
+    def add_files_to_process2(cls, limit=25):
+        """ Re-adds the most recent [limit] files that have been uploaded recently to FiletToProcess.
+            (this is fairly optimized because it is part of debugging file processing) """
+        from database.data_access_models import FileToProcess
+
+        upload_queries = []
+        for ds in DATA_STREAM_TO_S3_FILE_NAME_STRING.values():
+            if ds == "identifiers":
+                continue
+            query = (
+                cls.objects.order_by("-created_on")
+                    .filter(file_path__contains=ds)
+                    .values_list("file_path",
+                                 "participant__study_id",
+                                 "participant__study__object_id",
+                                 "participant_id")[:limit]
             )
+            upload_queries.append((ds, query))
+
+        new_ftps = []
+        # participant_cache = {}  # uhg need to cache participants...
+        file_paths_wandered = set(FileToProcess.objects.values_list("s3_file_path", flat=True))
+        for file_type, uploads_query in upload_queries:
+            print(file_type)
+            for i, (file_path, study_id, object_id, participant_id) in enumerate(uploads_query):
+
+                if i % 10 == 0 or i == limit-1:
+                    print(i+1 if i == limit-1 else i, sep="... ",)
+
+                if file_path in file_paths_wandered:
+                    continue
+                else:
+                    file_paths_wandered.add(file_path)
+
+                new_ftps.append(FileToProcess(
+                    s3_file_path=object_id + "/" + file_path,
+                    study_id=study_id,
+                    participant_id=participant_id
+                ))
+        FileToProcess.objects.bulk_create(new_ftps)
+
 
     @classmethod
     def get_trailing_count(cls, time_delta):

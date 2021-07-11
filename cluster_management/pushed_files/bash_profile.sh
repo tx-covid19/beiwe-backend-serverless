@@ -10,6 +10,8 @@
 # for ssh logins, install and configure the libpam-umask package.
 #umask 022
 
+alias b='cd ~/beiwe-backend/'
+
 alias update-commandline='cp ~/beiwe-backend/cluster_management/pushed_files/bash_profile.sh ~/.profile; cp ~/beiwe-backend/cluster_management/pushed_files/.inputrc ~/.inputrc'
 
 #Alias aliases
@@ -47,10 +49,14 @@ alias ri="rm -i"
 alias htop="htop -d 5"
 alias nload="nload -a 5 -i 80000 -o 80000"
 alias df="df -h"
+alias pip="python3 -m pip"
+alias pip3="python3 -m pip"
 
 #Git
 alias s='git status'
+alias d='git diff'
 alias gd='git diff'
+alias dw='git diff -w'
 alias gs='git diff --stat'
 alias pull="git pull"
 alias master="git checkout master"
@@ -78,13 +84,14 @@ alias processing-restart="pkill -HUP supervisord"
 #Logs
 alias loga='tail -f /var/log/apache2/error.log | cut -d " " -f 4,10-' #tail follow apache log
 alias logao='nano +1000000000 /var/log/apache2/error.log' #open log, go to end
-alias logc='tail -f /var/log/celery/*'
-alias logco='nano +1000000000 /var/log/celery/celeryd.err'
-alias logd='tail -f /var/log/supervisor/*'
-alias logdo='nano +1000000000 /var/log/supervisor/*'
+alias logc='tail -f /home/ubuntu/celery*.log'
+alias logco='nano +1000000000 /home/ubuntu/celery*.log'
+alias logd='tail -f /home/ubuntu/supervisor.log'
+alias logdo='nano +1000000000 /home/ubuntu/supervisor.log'
 
 #Configuration files
 alias conf='sudo nano $HOME/beiwe-backend/config/settings.py'
+alias superconf='sudo nano /etc/supervisord.conf'
 
 #Services configuration files
 alias boot="sudo sysv-rc-conf"
@@ -109,6 +116,14 @@ function runloop ()
     done
 }
 
+
+function backup () {
+    # parameter order: username, host, then it will prompt for password
+    # this is at least a hundred times faster than the django dumpdata command
+    pg_dump -F d -Z 9 -f /home/ubuntu/beiwe-backend/pg_dump --username=$1 --dbname=$2 --host=$3 --verbose
+}
+
+alias apt="sudo apt"
 
 ## Environment config ##
 

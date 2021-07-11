@@ -17,8 +17,10 @@ from deployment_helpers.constants import (AWS_CREDENTIALS_FILE, AWS_CREDENTIALS_
     VALIDATE_GLOBAL_CONFIGURATION_MESSAGE, WORKER_SERVER_INSTANCE_TYPE)
 from deployment_helpers.general_utils import EXIT, log, random_alphanumeric_string
 
-# Sentry changed their default DSN formatting in early 2018, we test for the old and the new.
-DSN_REGEX = re.compile('^(https://[\S]+:[\S]+@sentry\.io/[\S]+$|^https://[\S]+@sentry\.io/[\S]+$)')
+# Sentry DSNs are key_value@some.domain.com/6ish_numbers
+# Sentry has changed their DSN structure again, so I'm making the regex much weaker.
+# (still matches legacy and legacy-legacy).  \S should not be confused with \s.
+DSN_REGEX = re.compile('^https://[\S]+@[\S]+/[\S]+$')
 
 ####################################################################################################
 ################################### Reference Configs ##############################################
@@ -29,7 +31,6 @@ def reference_environment_configuration_file():
         "DOMAIN": "studies.mywebsite.com",
         "SENTRY_ELASTIC_BEANSTALK_DSN": "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX@sentry.io/######",
         "SENTRY_DATA_PROCESSING_DSN": "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX@sentry.io/######",
-        "SENTRY_ANDROID_DSN": "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX@sentry.io/######",
         "SENTRY_JAVASCRIPT_DSN": "https://XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX@sentry.io/######",
     }
 
@@ -116,7 +117,6 @@ def ensure_nonempty_string(value, value_name, errors_list, subject):
 
 def validate_beiwe_environment_config(eb_environment_name):
     # DOMAIN_NAME
-    # SENTRY_ANDROID_DSN
     # SENTRY_DATA_PROCESSING_DSN
     # SENTRY_ELASTIC_BEANSTALK_DSN
     # SENTRY_JAVASCRIPT_DSN
@@ -137,6 +137,9 @@ def validate_beiwe_environment_config(eb_environment_name):
     # Validate the data
     
     sysadmin_email = global_config.get('SYSTEM_ADMINISTRATOR_EMAIL', "")
+    if "," in sysadmin_email:
+        errors.append('(Global Configuration) You can only have one item in SYSTEM_ADMINISTRATOR_EMAIL: {}'.format(sysadmin_email))
+
     if not sysadmin_email:
         errors.append('(Global Configuration) System administrator email cannot be empty.')
     else:
@@ -147,7 +150,6 @@ def validate_beiwe_environment_config(eb_environment_name):
     sentry_dsns = {
         "SENTRY_ELASTIC_BEANSTALK_DSN": beiwe_variables.get('SENTRY_ELASTIC_BEANSTALK_DSN', ''),
         "SENTRY_DATA_PROCESSING_DSN": beiwe_variables.get('SENTRY_DATA_PROCESSING_DSN', ''),
-        "SENTRY_ANDROID_DSN": beiwe_variables.get('SENTRY_ANDROID_DSN', ''),
         "SENTRY_JAVASCRIPT_DSN": beiwe_variables.get('SENTRY_JAVASCRIPT_DSN', ''),
     }
     
@@ -155,11 +157,6 @@ def validate_beiwe_environment_config(eb_environment_name):
         if ensure_nonempty_string(dsn, name, errors, beiwe_variables_name):
             if not DSN_REGEX.match(dsn):
                 errors.append('({}) Invalid DSN: {}'.format(beiwe_variables_name, dsn))
-            # if name == "SENTRY_JAVASCRIPT_DSN":
-            #     if not PUBLIC_DSN_REGEX.match(dsn):
-            #         errors.append('({}) Invalid DSN: {}'.format(beiwe_variables_name, dsn))
-            # elif not PRIVATE_DSN_REGEX.match(dsn):
-            #     errors.append('({}) Invalid DSN: {}'.format(beiwe_variables_name, dsn))
                 
     domain_name = beiwe_variables.get('DOMAIN', None)
     ensure_nonempty_string(domain_name, 'Domain name', errors, beiwe_variables_name)
@@ -169,6 +166,10 @@ def validate_beiwe_environment_config(eb_environment_name):
             errors.append("{} is missing.".format(key))
 
     for key in beiwe_variables:
+        if key == "SENTRY_ANDROID_DSN":
+            errors.append("'SENTRY_ANDROID_DSN' is no longer needed by the Beiwe Backend. "
+                          "Please remove it from your environment variables settings file to continue.")
+            continue
         if key not in reference_environment_configuration_keys:
             errors.append("{} is present but was not expected.".format(key))
     
@@ -190,7 +191,6 @@ def validate_beiwe_environment_config(eb_environment_name):
         'SYSADMIN_EMAILS': sysadmin_email,
         'SENTRY_ELASTIC_BEANSTALK_DSN': sentry_dsns['SENTRY_ELASTIC_BEANSTALK_DSN'],
         'SENTRY_DATA_PROCESSING_DSN': sentry_dsns['SENTRY_DATA_PROCESSING_DSN'],
-        'SENTRY_ANDROID_DSN': sentry_dsns['SENTRY_ANDROID_DSN'],
         'SENTRY_JAVASCRIPT_DSN': sentry_dsns['SENTRY_JAVASCRIPT_DSN']
     }
 

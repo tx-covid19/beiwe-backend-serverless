@@ -2,7 +2,7 @@
 
 {% block head %}
     {{ super() }}
-    <script>filterableObjects = {{ admins|safe }}</script>
+    <script>filterableObjects = {{ admins|tojson }}</script>
     <script src="/static/javascript/app/survey-builder/controllers/filterable-list-controller.js"></script>
 {% endblock %}
 
@@ -31,7 +31,7 @@
                 </tr>
             </thead>
             <tbody>
-                <tr ng-repeat="researcher_data in filterableObjects | filter:{name: researcherFilterText}">
+                <tr ng-repeat="researcher_data in filterableObjects | filter:{username: researcherFilterText}">
                     <td>
                         <b>{% raw %}{{ researcher_data[0].username }}{% endraw %}</b>
                     </td>

@@ -1,14 +1,16 @@
+from django.core.validators import MinLengthValidator
 from django.db import models
 from django.db.models import F, Func
 
 from config.constants import ResearcherRole
-from database.models import AbstractModel
-from database.validators import id_validator, standard_base_64_validator, url_safe_base_64_validator
+from database.common_models import UtilityModel
+from database.models import TimestampedModel
+from database.validators import ID_VALIDATOR, STANDARD_BASE_64_VALIDATOR, URL_SAFE_BASE_64_VALIDATOR
 from libs.security import (compare_password, device_hash, generate_easy_alphanumeric_string,
     generate_hash_and_salt, generate_random_string, generate_user_hash_and_salt)
 
 
-class AbstractPasswordUser(AbstractModel):
+class AbstractPasswordUser(TimestampedModel):
     """
     The AbstractPasswordUser (APU) model is used to enable basic password functionality for human
     users of the database, whatever variety of user they may be.
@@ -19,9 +21,9 @@ class AbstractPasswordUser(AbstractModel):
     that the APU's password is never stored in a reversible manner.
     """
 
-    password = models.CharField(max_length=44, validators=[url_safe_base_64_validator],
+    password = models.CharField(max_length=44, validators=[URL_SAFE_BASE_64_VALIDATOR],
                                 help_text='A hash of the user\'s password')
-    salt = models.CharField(max_length=24, validators=[url_safe_base_64_validator])
+    salt = models.CharField(max_length=24, validators=[URL_SAFE_BASE_64_VALIDATOR])
 
     # This stub function declaration is present because it is used in the set_password funcion below
     def generate_hash_and_salt(self, password):
@@ -36,8 +38,13 @@ class AbstractPasswordUser(AbstractModel):
         Sets the instance's password hash to match the hash of the provided string.
         """
         password_hash, salt = self.generate_hash_and_salt(password.encode())
-        self.password = password_hash
-        self.salt = salt
+        # march 2020: this started failing when running postgres in a local environment.  There
+        # appears to be some extra type conversion going on, characters are getting expanded when
+        # passed in as bytes, causing failures in passing length validation.
+        # -- this was caused by the new django behavior that casts bytestrings to their string
+        #    representation silently.  Fix is to insert decode statements
+        self.password = password_hash.decode()
+        self.salt = salt.decode()
         self.save()
 
     def reset_password(self):
@@ -53,6 +60,15 @@ class AbstractPasswordUser(AbstractModel):
         Checks if the input matches the instance's password hash.
         """
         return compare_password(compare_me.encode(), self.salt.encode(), self.password.encode())
+
+    def as_unpacked_native_python(self, remove_timestamps=True):
+        ret = super().as_unpacked_native_python(remove_timestamps=remove_timestamps)
+        ret.pop("password")
+        ret.pop("salt")
+        ret.pop("access_key_id")
+        ret.pop("access_key_secret")
+        ret.pop("access_key_secret_salt")
+        return ret
 
     class Meta:
         abstract = True
@@ -75,21 +91,36 @@ class Participant(AbstractPasswordUser):
         (NULL_OS, NULL_OS),
     )
 
-    patient_id = models.CharField(max_length=8, unique=True, validators=[id_validator],
-                                  help_text='Eight-character unique ID with characters chosen from 1-9 and a-z')
+    patient_id = models.CharField(
+        max_length=8, unique=True, validators=[ID_VALIDATOR],
+        help_text='Eight-character unique ID with characters chosen from 1-9 and a-z'
+    )
+    device_id = models.CharField(
+        max_length=256, blank=True,
+        help_text='The ID of the device that the participant is using for the study, if any.'
+    )
+    os_type = models.CharField(
+        max_length=16, choices=OS_TYPE_CHOICES, blank=True,
+        help_text='The type of device the participant is using, if any.'
+    )
+    study = models.ForeignKey(
+        'Study', on_delete=models.PROTECT, related_name='participants', null=False
+    )
 
-    device_id = models.CharField(max_length=256, blank=True,
-                                 help_text='The ID of the device that the participant is using for the study, if any.')
-    os_type = models.CharField(max_length=16, choices=OS_TYPE_CHOICES, blank=True,
-                               help_text='The type of device the participant is using, if any.')
+    timezone_name = models.CharField(  # Warning: this is not used yet.
+        max_length=256, default="America/New_York", null=False, blank=False
+    )
 
-    study = models.ForeignKey('Study', on_delete=models.PROTECT, related_name='participants', null=False)
+    push_notification_unreachable_count = models.SmallIntegerField(default=True, null=False, blank=False)
+
+    deleted = models.BooleanField(default=False)
+
+    # "Unregistered" means the participant is blocked from uploading further data.
+    unregistered = models.BooleanField(default=False)
 
     @classmethod
     def create_with_password(cls, **kwargs):
-        """
-        Creates a new participant with randomly generated patient_id and password.
-        """
+        """ Creates a new participant with randomly generated patient_id and password. """
 
         # Ensure that a unique patient_id is generated. If it is not after
         # twenty tries, raise an error.
@@ -108,42 +139,61 @@ class Participant(AbstractPasswordUser):
 
         return patient_id, password
 
-    def generate_hash_and_salt(self, password):
+    def generate_hash_and_salt(self, password: bytes):
         return generate_user_hash_and_salt(password)
 
-    def debug_validate_password(self, compare_me):
+    def debug_validate_password(self, compare_me: str):
         """
-        Checks if the input matches the instance's password hash, but does
-        the hashing for you for use on the command line. This is necessary
-        for manually checking that setting and validating passwords work.
+        Checks if the input matches the instance's password hash, but does the hashing for you
+        for use on the command line. This is necessary for manually checking that setting and
+        validating passwords work.
         """
-        compare_me = device_hash(compare_me)
-        return compare_password(compare_me, self.salt, self.password)
+        compare_me = device_hash(compare_me.encode())
+        return compare_password(compare_me, self.salt.encode(), self.password.encode())
 
-    def set_device(self, device_id):
-        self.device_id = device_id
-        self.save()
+    def assign_fcm_token(self, fcm_instance_id: str):
+        ParticipantFCMHistory.objects.create(participant=self, token=fcm_instance_id)
 
-    def set_os_type(self, os_type):
-        self.os_type = os_type
-        self.save()
+    def get_fcm_token(self):
+        return self.fcm_tokens.latest("created_on")
 
-    def clear_device(self):
-        self.device_id = ''
-        self.save()
+    def notification_events(self, **archived_event_filter_kwargs):
+        from database.schedule_models import ArchivedEvent
+        return ArchivedEvent.objects.filter(participant=self).filter(
+            **archived_event_filter_kwargs
+        ).order_by("-scheduled_time")
 
+    def get_private_key(self):
+        from libs.s3 import get_client_private_key  # weird import triangle
+        return get_client_private_key(self.patient_id, self.study.object_id)
 
     def __str__(self):
         return '{} {} of Study {}'.format(self.__class__.__name__, self.patient_id, self.study.name)
 
 
-class ParticipantFieldValue(models.Model):
+class PushNotificationDisabledEvent(UtilityModel):
+    # There may be many events
+    # this is (currently) purely for record keeping.
+    participant = models.ForeignKey(Participant, null=False, on_delete=models.PROTECT)
+    count = models.IntegerField(null=False)
+    timestamp = models.DateTimeField(null=False, blank=False, auto_now_add=True, db_index=True)
+
+
+class ParticipantFCMHistory(TimestampedModel):
+    # by making the token unique the solution to problems becomes "reinstall the app"
+    participant = models.ForeignKey("Participant", null=False, on_delete=models.PROTECT, related_name="fcm_tokens")
+    token = models.CharField(max_length=256, blank=False, null=False, db_index=True, unique=True,
+                             validators=[MinLengthValidator(1)])
+    unregistered = models.DateTimeField(null=True, blank=True)
+
+
+class ParticipantFieldValue(UtilityModel):
     """
-    These objects can be deleted.
+    These objects can be deleted.  These are values for per-study custom fields for users
     """
     participant = models.ForeignKey(Participant, on_delete=models.PROTECT, related_name='field_values')
     field = models.ForeignKey('StudyField', on_delete=models.CASCADE, related_name='field_values')
-    value = models.TextField()
+    value = models.TextField(null=False, blank=True, default="")
 
     class Meta:
         unique_together = (("participant", "field"),)
@@ -160,9 +210,9 @@ class Researcher(AbstractPasswordUser):
     username = models.CharField(max_length=32, unique=True, help_text='User-chosen username, stored in plain text')
     site_admin = models.BooleanField(default=False, help_text='Whether the researcher is also an admin')
 
-    access_key_id = models.CharField(max_length=64, validators=[standard_base_64_validator], unique=True, null=True, blank=True)
-    access_key_secret = models.CharField(max_length=44, validators=[url_safe_base_64_validator], blank=True)
-    access_key_secret_salt = models.CharField(max_length=24, validators=[url_safe_base_64_validator], blank=True)
+    access_key_id = models.CharField(max_length=64, validators=[STANDARD_BASE_64_VALIDATOR], unique=True, null=True, blank=True)
+    access_key_secret = models.CharField(max_length=44, validators=[URL_SAFE_BASE_64_VALIDATOR], blank=True)
+    access_key_secret_salt = models.CharField(max_length=24, validators=[URL_SAFE_BASE_64_VALIDATOR], blank=True)
 
     is_batch_user = models.BooleanField(default=False)
 
@@ -172,7 +222,6 @@ class Researcher(AbstractPasswordUser):
         Creates a new Researcher with provided username and password. They will initially
         not be associated with any Study.
         """
-
         researcher = cls(username=username, **kwargs)
         researcher.set_password(password)
         # todo add check to see if access credentials are in kwargs
@@ -184,7 +233,6 @@ class Researcher(AbstractPasswordUser):
         """
         Create a new Researcher with provided username and no password
         """
-
         r = cls(username=username, password='fakepassword', salt='cab', site_admin=False)
         r.reset_access_credentials()
         return r
@@ -206,29 +254,21 @@ class Researcher(AbstractPasswordUser):
             Researcher.objects
                 .annotate(username_lower=Func(F('username'), function='LOWER'))
                 .order_by('username_lower')
-                .exclude(username__contains="BATCH USER").exclude(username__contains="AWS LAMBDA")
-                .filter(*args, **kwargs)
+                .filter(is_batch_user=False, *args, **kwargs)
         )
-
-    @classmethod
-    def get_all_researchers_by_username(cls):
-        """ Gen the un-deleted Researchers a-z by username, ignoring case."""
-        return cls.filter_alphabetical(deleted=False)
 
     def get_administered_researchers(self):
         studies = self.study_relations.filter(
             relationship=ResearcherRole.study_admin).values_list("study_id", flat=True)
         researchers = StudyRelation.objects.filter(
             study_id__in=studies).values_list("researcher_id", flat=True).distinct()
-        return Researcher.objects.filter(id__in=researchers)
+        return Researcher.objects.filter(id__in=researchers, is_batch_user=False)
 
     def get_administered_researchers_by_username(self):
         return (
             self.get_administered_researchers()
-                .filter(deleted=False)
                 .annotate(username_lower=Func(F('username'), function='LOWER'))
                 .order_by('username_lower')
-                .exclude(username__contains="BATCH USER").exclude(username__contains="AWS LAMBDA")
         )
 
     def get_administered_studies_by_name(self):
@@ -292,7 +332,7 @@ class Researcher(AbstractPasswordUser):
         ).exists()
 
 
-class StudyRelation(AbstractModel):
+class StudyRelation(TimestampedModel):
     """
     This is the through-model for defining the relationship between a researcher and a study.
     There are these relatioships:
@@ -301,10 +341,10 @@ class StudyRelation(AbstractModel):
         researcher
     """
     study = models.ForeignKey(
-        'Study', on_delete=models.PROTECT, related_name='study_relations', null=False, db_index=True
+        'Study', on_delete=models.CASCADE, related_name='study_relations', null=False, db_index=True
     )
     researcher = models.ForeignKey(
-        'Researcher', on_delete=models.PROTECT, related_name='study_relations', null=False, db_index=True
+        'Researcher', on_delete=models.CASCADE, related_name='study_relations', null=False, db_index=True
     )
     relationship = models.CharField(max_length=32, null=False, blank=False, db_index=True)
 
@@ -315,4 +355,3 @@ class StudyRelation(AbstractModel):
         return "%s is a %s in %s" % (self.researcher.username,
                                      self.relationship.replace("_", " ").title(),
                                      self.study.name)
-

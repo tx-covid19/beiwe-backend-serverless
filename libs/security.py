@@ -3,7 +3,7 @@ import codecs
 import hashlib
 import random
 import re
-# pbkdf2 is a hashing protocol specifically for safe password hash generation.
+from binascii import Error as base64_error
 from hashlib import pbkdf2_hmac as pbkdf2
 from os import urandom
 
@@ -14,8 +14,13 @@ from config.settings import FLASK_SECRET_KEY
 from config.study_constants import EASY_ALPHANUMERIC_CHARS
 
 
+# seed the random number subsystem with some good entropy.
+random.seed(urandom(256))
+
+
 class DatabaseIsDownError(Exception): pass
 class PaddingException(Exception): pass
+class Base64LengthException(Exception): pass
 
 
 def set_secret_key(app):
@@ -30,14 +35,17 @@ def set_secret_key(app):
 # Mongo does not like strings with invalid binary config, so we store binary config
 # using url safe base64 encoding.
 
+
+# noinspection InsecureHash
 def chunk_hash(data: bytes) -> bytes:
     """ We need to hash data in a data stream chunk and store the hash in mongo. """
     digest = hashlib.md5(data).digest()
-    return codecs.encode(digest, "base64").replace(b"\n",b"")
+    return codecs.encode(digest, "base64").replace(b"\n", b"")
 
 
+# noinspection InsecureHash
 def device_hash(data: bytes) -> bytes:
-    """ Hashes an input string using the sha256 hash, mimicing the hash used on
+    """ Hashes an input string using the sha256 hash, mimicking the hash used on
     the devices.  Expects a string not in base64, returns a base64 string."""
     sha256 = hashlib.sha256()
     sha256.update(data)
@@ -46,22 +54,31 @@ def device_hash(data: bytes) -> bytes:
 
 def encode_generic_base64(data: bytes) -> bytes:
     # """ Creates a url safe base64 representation of an input string, strips new lines."""
-    return base64.b64encode(data).replace(b"\n",b"")
+    return base64.b64encode(data).replace(b"\n", b"")
 
 
 def encode_base64(data: bytes) -> bytes:
     """ Creates a url safe base64 representation of an input string, strips
         new lines."""
-    return base64.urlsafe_b64encode(data).replace(b"\n",b"")
+    return base64.urlsafe_b64encode(data).replace(b"\n", b"")
 
 
 def decode_base64(data: bytes) -> bytes:
-    """ unpacks url safe base64 encoded string. """
+    """ unpacks url safe base64 encoded string. Throws a more obviously named variable when
+    encountering a padding error, which just means that there was no base64 padding for base64
+    blobs of invalid length (possibly invalid base64 ending characters). """
     try:
         return base64.urlsafe_b64decode(data)
-    except TypeError as e:
-        if "Incorrect padding" == str(e):
-            raise PaddingException()
+    except base64_error as e:
+        # (in python 3.8 the error message is changed to include this information.)
+        length = len(data.strip(b"="))
+        if length % 4 != 0:
+            raise Base64LengthException(f"Data provided had invalid length {length} after padding was removed.")
+
+        if "incorrect padding" in str(e).lower():
+            # str(data) here is correct, we need a representation of the data, not the raw data.
+            raise PaddingException(f'{str(e)} -- "{str(data)}"')
+
         raise
 
 
